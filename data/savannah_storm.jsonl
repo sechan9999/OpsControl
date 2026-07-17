@@ -1,0 +1,32 @@
+{"id": "s01", "channel": "edi", "raw": "STATUS: CNTR MSKU7401229 SHPMT OPS-40021-A HELD PORT OF SAVANNAH REASON WX SEVERE RAIN EST DELAY 14HRS NEXT UPDATE 0600"}
+{"id": "s02", "channel": "edi", "raw": "STATUS: CNTR TCLU5583010 SHPMT OPS-40022-B HELD PORT OF SAVANNAH REASON WX SEVERE RAIN EST DELAY 14HRS NEXT UPDATE 0600"}
+{"id": "s03", "channel": "email", "raw": "Hi team, heads up from BlueOcean - due to the storm system over coastal Georgia, all gate moves at Savannah GCT are suspended until tomorrow morning. Your units under booking OPS-40023-C and OPS-40024-A are affected. We'll advise revised availability. Thanks, Marcus"}
+{"id": "s04", "channel": "sms", "raw": "savannah gate closed. OPS-40025-b not picked up today. driver rescheduled tmrw am"}
+{"id": "s05", "channel": "edi", "raw": "STATUS: CNTR MSCU8812774 SHPMT OPS-40026-C VESSEL EVER FORWARD ROLLOVER AT TRANSSHIP SINGAPORE NEW ETD +5D"}
+{"id": "s06", "channel": "email", "raw": "Good morning, customs has flagged shipment OPS-40027-A for documentation review at Long Beach. Broker states missing commercial invoice page 2. Container will not release until resolved. Please advise urgency - consignee is expecting delivery Friday."}
+{"id": "s07", "channel": "edi", "raw": "STATUS: SHPMT OPS-40028-B CHASSIS UNAVAILABLE LB TERMINAL POOL DEPLETED EST 48HR WAIT SPLIT AVAILABLE VIA POOL-OF-POOLS"}
+{"id": "s08", "channel": "sms", "raw": "reefer alarm OPS-40029-c temp reading -12C setpoint -18C tech dispatched eta 2hr"}
+{"id": "s09", "channel": "email", "raw": "This is an automated notice: Shipment OPS-40030-A missed the documentation cutoff for vessel MAERSK DENVER voyage 128E. Rolled to next sailing, new ETD July 24. Reply STOP to unsubscribe."}
+{"id": "s10", "channel": "edi", "raw": "STATUS: CNTR HLXU4437920 SHPMT OPS-40031-B ACCIDENT I-16 WESTBOUND DRAY LEG NO INJURIES CONTAINER INTACT TOW REQUIRED NEW DELIVERY TBD"}
+{"id": "d1", "channel": "edi", "raw": "STATUS: CNTR MSKU7401229 SHPMT OPS-40021-A HELD PORT OF SAVANNAH REASON WX SEVERE RAIN EST DELAY 14HRS NEXT UPDATE 0600"}
+{"id": "s11", "channel": "email", "raw": "Team - Savannah update #2. GCT now projecting gate reopen 10:00 local. Units OPS-40021-A, OPS-40022-B, OPS-40032-C queued for first available moves. Demurrage clock paused per port authority bulletin."}
+{"id": "s12", "channel": "edi", "raw": "STATUS: SHPMT OPS-40033-A WEATHER DIVERT VSL NORTHERN JUBILEE REROUTED CHARLESTON DISCHARGE PLANNED THERE INLAND RAIL REQUIRED"}
+{"id": "s13", "channel": "sms", "raw": "OPS-40034-b stuck at customs busan xray secondary. maybe 2-3 days per broker"}
+{"id": "s14", "channel": "email", "raw": "Hello, following up on OPS-40035-C - the receiver says the appointment window was missed yesterday and their dock is now booked until Monday. Do you want us to request a weekend slot (fee applies) or hold at our yard?"}
+{"id": "s15", "channel": "edi", "raw": "STATUS: CNTR CMAU3320981 SHPMT OPS-40036-A PORT CONGESTION ROTTERDAM BERTH WAIT 36HRS VESSEL AT ANCHORAGE"}
+{"id": "m1", "channel": "edi", "raw": "@@@#ERR 0x004452 FEED RESYNC ]]]]] NO PAYLOAD {{{{"}
+{"id": "s16", "channel": "email", "raw": "FYI - the shipper amended the PO quantity after loading on OPS-40037-B. Paperwork mismatch may trigger a hold at destination customs. Recommend pre-alerting the broker tonight."}
+{"id": "s17", "channel": "edi", "raw": "STATUS: SHPMT OPS-40038-C REEFER GENSET FAILURE RAIL RAMP MEMPHIS UNIT ON BACKUP POWER 6HR REMAINING"}
+{"id": "s18", "channel": "sms", "raw": "driver waiting 4h+ at savannah gate. detention will apply OPS-40039-a"}
+{"id": "s19", "channel": "email", "raw": "Notice: Vessel EVER FORWARD schedule change. All transshipment cargo at Singapore including OPS-40026-C and OPS-40040-B now connecting to voyage 77W, ETD +5 days versus plan. Revised arrival notices to follow."}
+{"id": "d2", "channel": "email", "raw": "Notice: Vessel EVER FORWARD schedule change. All transshipment cargo at Singapore including OPS-40026-C and OPS-40040-B now connecting to voyage 77W, ETD +5 days versus plan. Revised arrival notices to follow."}
+{"id": "s20", "channel": "edi", "raw": "STATUS: CNTR TGHU9902445 SHPMT OPS-40041-C HELD SAVANNAH WX CREW SHORTAGE COMPOUNDING EST DELAY NOW 22HRS"}
+{"id": "s21", "channel": "email", "raw": "Hi, small one - OPS-40042-A delivered but consignee reports seal number mismatch vs BOL. Cargo appears fine. They need a corrected document set for their records before receiving can close out."}
+{"id": "s22", "channel": "edi", "raw": "STATUS: SHPMT OPS-40043-B CHASSIS SHORTAGE SAVANNAH POOL ALLOCATING BY PRIORITY TIER PROVIDE TIER CODE"}
+{"id": "s23", "channel": "sms", "raw": "norfolk intl backlog clearing. OPS-40044-c gate out completed 1417 local"}
+{"id": "s24", "channel": "email", "raw": "Escalation: OPS-40045-A is temperature-sensitive pharma with a hard delivery window Thursday 08:00-12:00. Current Savannah hold puts arrival at Thursday 15:40. Client contract has a $25k OTIF penalty clause. Need options today please."}
+{"id": "s25", "channel": "edi", "raw": "STATUS: CNTR FCIU6674401 SHPMT OPS-40046-B CUSTOMS EXAM VACIS COMPLETE RELEASED PENDING PAYMENT OF EXAM FEE"}
+{"id": "s26", "channel": "email", "raw": "Morning - rail update: Memphis ramp running 12h behind on interchange. OPS-40038-C and OPS-40047-C affected. Reefer unit priority-flagged given genset situation."}
+{"id": "d3", "channel": "sms", "raw": "savannah gate closed. OPS-40025-b not picked up today. driver rescheduled tmrw am"}
+{"id": "s27", "channel": "edi", "raw": "STATUS: SHPMT OPS-40048-A MISSED ERD CUTOFF SAVANNAH RESULT OF GATE CLOSURE AUTO-REBOOKED NEXT VSL ETD JUL 26"}
+{"id": "s28", "channel": "email", "raw": "Hi ops, our Rotterdam agent says berth congestion is easing; OPS-40036-A vessel expected alongside tonight. Discharge within 24h. No action needed unless consignee wants expedited inland leg."}

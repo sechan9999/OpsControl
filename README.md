@@ -1,34 +1,59 @@
 # OpsControl
 
-OpsControl is a human-in-the-loop exception desk for operations teams. It turns a surge of unstructured status updates into a prioritized queue, impact assessments, draft stakeholder communications, and an explicit review queue.
+OpsControl is a human-in-the-loop operations exception desk for freight teams. It converts a surge of carrier updates into a prioritized queue, impact assessments, customer-ready drafts, and a focused review list.
 
-## Status
+## Live demo
 
-Scaffold only. Product requirements and seed-data contracts are defined before implementation.
+[opscontrol.streamlit.app](https://opscontrol.streamlit.app/)
 
-## Repository layout
+The deployed demo uses deterministic scenario data. No account, API key, or credentials are required for judges.
 
-- `docs/PRD.md` - product requirements and acceptance criteria
-- `docs/seed-data-spec.md` - deterministic demo dataset contract
-- `data/` - future scenario fixtures
-- `src/opscontrol/` - application package
-- `tests/` - automated tests
+### Judge test path
 
-## Planned MVP
+1. Click **Reset desk**.
+2. Click **Replay the Savannah storm (32 messages)**.
+3. Open the top red item, `OPS-40045-A`, and inspect the assessment, five-round trace, draft, and action plan.
+4. Click **Approve & send** to exercise the required human approval step.
+5. Open **Human review** to inspect ambiguous and malformed input safely escalated to an operator.
+6. Click **Replay again (all duplicates)** to verify that repeated deliveries do not create new work.
 
-1. Ingest email, webhook, and EDI-style operational updates.
-2. Deduplicate repeated events and classify each exception.
-3. Run a bounded impact investigation with stored trace data.
-4. Draft stakeholder communication and route uncertain cases to a human.
-5. Provide a replayable incident scenario for product and regression testing.
+## What it demonstrates
 
-## Local setup
+- Normalized-message idempotency: three duplicate deliveries are identified during the 32-message replay.
+- Bounded investigation: each assessment uses at most five tool rounds.
+- Prioritized risk: the pharma escalation `OPS-40045-A` has a missed window and $25,000 at risk.
+- Human control: customer communication is editable and cannot be marked sent without approval.
+- Safe failure handling: malformed and low-confidence updates appear in Human review instead of being silently guessed or discarded.
 
-Implementation has not started. Once the first service is added, local setup and test commands will be documented here.
+## Run locally
 
-## Design principles
+```bash
+python -m pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
 
-- Human approval remains required for outbound communication.
-- Ambiguity routes to review; it is never silently guessed.
-- Every automated decision is traceable.
-- The demo must be deterministic and safe to replay.
+Run the regression suite:
+
+```bash
+python -m pytest
+```
+
+## OpenAI and Codex
+
+OpsControl was built with Codex to scaffold the workflow, implement guardrails, and create regression coverage. The default demo uses deterministic triage so judges receive the same result without credentials.
+
+An optional GPT-5.6 structured-triage path is included for local use. Keep secrets out of Git: set `OPSCONTROL_DEMO_MODE=0`, `OPSCONTROL_USE_OPENAI=1`, and `OPENAI_API_KEY` in an untracked `.env` file or in Streamlit secrets. The application falls back to deterministic triage if a live request fails.
+
+## Project structure
+
+- `streamlit_app.py` - operator control surface
+- `opscontrol/` - triage, investigation, composition, storage, and workflow engine
+- `data/savannah_storm.jsonl` - deterministic 32-message scenario
+- `tests/` - replay and guardrail tests
+- `docs/PRD.md` - product requirements
+- `docs/seed-data-spec.md` - scenario contract
+- `docs/submission-checklist.md` - final hackathon submission checklist
+
+## Roadmap
+
+The next step is to connect real carrier channels: EDI 214/315 feeds, email ingestion, and webhook events. From there, OpsControl can add authenticated approval, real email delivery, customer-specific communication preferences, and feedback from review outcomes to improve routing over time.
