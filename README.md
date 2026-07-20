@@ -1,6 +1,7 @@
 # OpsControl
 
-OpsControl is a human-in-the-loop operations exception desk for freight teams. It converts a surge of carrier updates into a prioritized queue, impact assessments, customer-ready drafts, and a focused review list.
+Freight Desk OpsControl is a human-in-the-loop operations exception desk for freight teams. It converts a surge of carrier updates into a prioritized queue, impact assessments, customer-ready drafts, and a focused review list.
+https://devpost.com/software/freightdesk
 
 ## Live demo
 
