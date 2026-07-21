@@ -16,7 +16,7 @@ from opscontrol.store import Desk
 from opscontrol.telemetry import get_port_telemetry, get_vessel_telemetry
 from opscontrol.tools import alternative_carriers
 
-st.set_page_config(page_title="FreightDesk - AI Exception Desk", page_icon="🚢", layout="wide")
+st.set_page_config(page_title="OpsControl - AI Exception Desk", page_icon="🚢", layout="wide")
 
 SEED_PATH = Path(__file__).parent / "data" / "savannah_storm.jsonl"
 STATE_PATH = Path(os.getenv("OPSCONTROL_STATE_PATH", Path(__file__).parent / ".opscontrol_state.json"))
@@ -186,7 +186,7 @@ with st.sidebar:
 # Main App Header & Metrics
 # ---------------------------------------------------------------------------
 
-st.title("FreightDesk")
+st.title("OpsControl")
 st.caption(
     "**An AI exception desk for freight ops.** Raw carrier messages are triaged, "
     "investigated with a bounded agent, prioritized, and drafted for one-click approval."

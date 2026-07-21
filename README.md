@@ -1,6 +1,6 @@
-# FreightDesk (OpsControl)
+# OpsControl
 
-**FreightDesk** (OpsControl) is an AI-powered human-in-the-loop exception desk for freight operations. It converts a chaotic surge of carrier updates into a prioritized queue, impact assessments grounded in the **Microsoft Supply Chain Ontology**, customer-ready drafts, interactive cascade graphs, and an operator-gated review surface.
+**OpsControl** is an AI-powered human-in-the-loop exception desk for freight operations. It converts a chaotic surge of carrier updates into a prioritized queue, impact assessments grounded in the **Microsoft Supply Chain Ontology**, customer-ready drafts, interactive cascade graphs, and an operator-gated review surface.
 
 👉 **Devpost Submission:** [devpost.com/software/freightdesk](https://devpost.com/software/freightdesk)  
 👉 **GitHub Repo:** [github.com/sechan9999/OpsControl](https://github.com/sechan9999/OpsControl)
