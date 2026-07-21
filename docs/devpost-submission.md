@@ -22,6 +22,10 @@ High-confidence cases move to **Ready for approval**. Ambiguous, malformed, or l
 
 The Savannah storm replay contains 32 realistic messages: 29 unique records, three duplicate deliveries, malformed input, and a temperature-sensitive pharma shipment with a missed window and $25,000 at risk.
 
+The implementation keeps external integrations separate from the core decision
+engine. This allows the same guardrails, approval rules, and audit behavior to be
+used with deterministic demo data or production carrier adapters.
+
 ### Guardrails
 
 OpsControl treats reliability as a product feature:
@@ -38,9 +42,20 @@ Codex was used to develop the workflow, guardrails, replay fixture, persistence,
 
 OpsControl also includes an opt-in GPT-5.6 structured-triage path for live carrier text. It is disabled in demo mode, requires explicit environment configuration, and falls back safely to deterministic triage if the live request fails.
 
-### What's next
+### Built for extension
 
-The next step is to connect EDI 214/315 feeds, email ingestion, and signed webhook events. Subsequent releases can add authenticated approval, real email delivery, customer-specific preferences, and a feedback loop from review outcomes.
+OpsControl separates the operational workflow into explicit feature boundaries:
+
+- Validated EDI, email, SMS, and webhook ingestion
+- Human-controlled approval and review actions
+- A delivery adapter that is deterministic in the demo and replaceable in production
+- Customer-specific communication profiles
+- Structured feedback events for operator outcomes
+
+The public demo intentionally performs no external delivery and requires no
+credentials. Production adapters can connect these boundaries to authenticated
+EDI 214/315 feeds, monitored inboxes, signed webhooks, transactional email
+providers, tenant-level preferences, and persisted feedback analytics.
 
 ## Private judge access field
 

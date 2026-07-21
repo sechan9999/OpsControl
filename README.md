@@ -48,13 +48,25 @@ An optional GPT-5.6 structured-triage path is included for local use. Keep secre
 ## Project structure
 
 - `streamlit_app.py` - operator control surface
+- `features/` - ingestion, approval, delivery, customer-profile, and feedback extension points
+- `features/ingest.py` - validated single-message and batch ingestion
+- `features/approval.py` - operator-controlled approval, review, and dismissal actions
+- `features/email.py` - credential-free demo delivery adapter and production sender contract
+- `features/customer_profile.py` - customer communication preference model
+- `features/feedback_loop.py` - structured operator outcome events
 - `opscontrol/` - triage, investigation, composition, storage, and workflow engine
 - `data/savannah_storm.jsonl` - deterministic 32-message scenario
-- `tests/` - replay and guardrail tests
+- `tests/` - replay, guardrail, and feature tests
 - `docs/PRD.md` - product requirements
 - `docs/seed-data-spec.md` - scenario contract
 - `docs/submission-checklist.md` - final hackathon submission checklist
 
-## Roadmap
+## Production integration path
 
-The next step is to connect real carrier channels: EDI 214/315 feeds, email ingestion, and webhook events. From there, OpsControl can add authenticated approval, real email delivery, customer-specific communication preferences, and feedback from review outcomes to improve routing over time.
+OpsControl now separates ingestion, approval, delivery, customer preferences, and
+operator feedback into dedicated feature modules. The public deployment continues
+to use deterministic scenario data and a no-network delivery adapter.
+
+Production deployments can implement these extension points with authenticated
+EDI 214/315 feeds, monitored email inboxes, signed webhooks, transactional email
+providers, tenant-level customer profiles, and persisted review feedback.

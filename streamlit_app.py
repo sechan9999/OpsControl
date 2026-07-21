@@ -5,8 +5,9 @@ from pathlib import Path
 
 import streamlit as st
 
+from features.approval import approve_and_send, dismiss_exception, send_to_review
+from features.ingest import ingest_batch, ingest_message
 from opscontrol.config import Settings, settings_from_env
-from opscontrol.pipeline import process_message
 from opscontrol.store import Desk
 
 st.set_page_config(page_title="OpsControl - AI Exception Desk", page_icon="FD", layout="wide")
@@ -27,6 +28,14 @@ SAMPLE_MESSAGES = {
     "Reefer alarm (SMS)": "reefer alarm OPS-40079-A temp -11C setpoint -18C tech dispatched",
     "No reference (email)": "A container is held at customs, no booking reference available yet, broker investigating documentation exam status.",
     "Malformed feed": "@@@#ERR 0x11 FEED RESYNC ]]]]] NO PAYLOAD {{{{",
+}
+
+SAMPLE_CHANNELS = {
+    "Port delay (EDI)": "edi",
+    "Customs hold (email)": "email",
+    "Reefer alarm (SMS)": "sms",
+    "No reference (email)": "email",
+    "Malformed feed": "edi",
 }
 
 
@@ -67,7 +76,8 @@ with st.sidebar:
     settings = replace(base_settings, confidence_threshold=threshold)
     if st.button("Inject message", use_container_width=True):
         raw = custom.strip() or SAMPLE_MESSAGES[sample_key]
-        process_message(raw, "email" if custom.strip() else "edi", desk, settings)
+        channel = "email" if custom.strip() else SAMPLE_CHANNELS[sample_key]
+        ingest_message(raw, channel, desk, settings)
         persist_and_rerun()
     st.caption(
         "Demo mode uses a deterministic stub engine (zero tokens, reproducible). "
@@ -83,15 +93,13 @@ st.caption(
 
 b1, b2, b3 = st.columns([2, 2, 1])
 if b1.button("Replay the Savannah storm (32 messages)", type="primary", use_container_width=True):
-    for message in load_seed():
-        process_message(message["raw"], message["channel"], desk, settings)
+    ingest_batch(load_seed(), desk, settings)
     st.session_state.replayed = True
     persist_and_rerun()
 if b2.button("Replay again (all duplicates)", use_container_width=True,
              help="Re-sends the same 32 messages: idempotency drops every one.",
              disabled=not st.session_state.get("replayed")):
-    for message in load_seed():
-        process_message(message["raw"], message["channel"], desk, settings)
+    ingest_batch(load_seed(), desk, settings)
     persist_and_rerun()
 if b3.button("Reset desk", use_container_width=True):
     if STATE_PATH.exists():
@@ -163,20 +171,35 @@ def render_exception(record, namespace: str) -> None:
         if record.status in ("ready_for_approval", "needs_human_review"):
             col_a, col_b, col_c = st.columns(3)
             if col_a.button("Approve & send", key=f"{namespace}-approve-{record.id}", use_container_width=True):
-                if draft:
-                    draft.email_subject = st.session_state.get(f"{namespace}-subj-{record.id}", draft.email_subject)
-                    draft.email_body = st.session_state.get(f"{namespace}-body-{record.id}", draft.email_body)
-                desk.set_status(record.id, "sent")
-                desk.log("info", "customer_email_sent", id=record.id, ref=triage.shipment_ref or "-")
+                subject = (
+                    st.session_state.get(
+                        f"{namespace}-subj-{record.id}",
+                        draft.email_subject,
+                    )
+                    if draft
+                    else None
+                )
+                body = (
+                    st.session_state.get(
+                        f"{namespace}-body-{record.id}",
+                        draft.email_body,
+                    )
+                    if draft
+                    else None
+                )
+                approve_and_send(
+                    desk,
+                    record.id,
+                    subject=subject,
+                    body=body,
+                )
                 persist_and_rerun()
             if record.status == "ready_for_approval":
                 if col_b.button("Send to review", key=f"{namespace}-review-{record.id}", use_container_width=True):
-                    desk.set_status(record.id, "needs_human_review")
-                    desk.log("warning", "sent_to_review", id=record.id, by="operator")
+                    send_to_review(desk, record.id)
                     persist_and_rerun()
             if col_c.button("Dismiss", key=f"{namespace}-dismiss-{record.id}", use_container_width=True):
-                desk.set_status(record.id, "dismissed")
-                desk.log("info", "dismissed", id=record.id)
+                dismiss_exception(desk, record.id)
                 persist_and_rerun()
 
 
@@ -199,13 +222,3 @@ with tab_log:
         st.code("\n".join(desk.logs[:120]), language="text")
     else:
         st.info("No activity yet.")
-
-st.divider()
-st.subheader("What's next")
-st.write(
-    "The next step is to connect real carrier channels: EDI 214/315 feeds, email "
-    "ingestion, and webhook events. From there, OpsControl can add authenticated "
-    "approval, real email delivery, customer-specific communication preferences, and "
-    "feedback from review outcomes to improve routing over time."
-)
-st.markdown("[opscontrol.streamlit.app](https://opscontrol.streamlit.app/)")
