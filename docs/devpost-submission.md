@@ -1,12 +1,12 @@
-# Devpost submission: FreightDesk (OpsControl)
+# Devpost submission: OpsControl
 
 ## Project name
 
-FreightDesk (OpsControl)
+OpsControl
 
 ## Elevator pitch
 
-FreightDesk turns a flood of carrier alerts into a prioritized operations queue, ontology-grounded impact assessments, customer-ready drafts, and a PIN-gated human review desk.
+OpsControl turns a flood of carrier alerts into a prioritized operations queue, ontology-grounded impact assessments, customer-ready drafts, and a PIN-gated human review desk.
 
 ## Project description
 
@@ -16,52 +16,45 @@ A port crisis or weather event generates dozens of EDI updates, carrier emails, 
 
 ### The solution
 
-FreightDesk is an AI-powered human-in-the-loop exception desk for freight operations. It ingests multi-channel carrier feeds, triages exceptions across 12 disruption categories, investigates impact via a bounded evidence loop, models mitigation cascades using the **Microsoft Supply Chain Disruption Ontology**, and drafts customer communications.
+OpsControl is an AI-powered human-in-the-loop exception desk for freight operations. It ingests multi-channel carrier feeds, triages exceptions across 12 disruption categories, investigates impact via a bounded evidence loop, models mitigation cascades using the **Microsoft Supply Chain Disruption Ontology**, and drafts customer communications.
 
-High-confidence cases move to **Inbox** (Ready for approval). Ambiguous, malformed, or low-confidence cases move to **Human review**. Operators authenticate with Name + PIN (`2468`), inspect raw messages, agent traces, and interactive **Mermaid Ontology Cascade Graphs**, edit drafts, and explicitly approve before messages are sent.
+High-confidence cases move to **Inbox** (Ready for approval). Ambiguous, malformed, or low-confidence cases move to **Human review**. Operators authenticate with Name + PIN (`2468`), inspect raw messages, agent traces, live AIS vessel telemetry, and interactive **Mermaid Ontology Cascade Graphs**, edit drafts, and explicitly approve before messages are sent.
 
 The Savannah storm replay contains 32 realistic messages: 29 unique records, three duplicate deliveries, malformed input, and a temperature-sensitive pharma escalation with a missed window and $25,000 at risk.
 
 ### Guardrails & Reliability
 
-FreightDesk treats reliability as a core product requirement:
+OpsControl treats reliability as a core product requirement:
 
 - **Idempotency**: SHA-256 hash deduplication prevents duplicate carrier updates from cluttering queues.
 - **Bounded Investigation**: Agent loops are hard-capped at 5 tool rounds with full audit traces.
 - **Ontology Grounding**: Uses the 7-entity Microsoft Supply Chain Disruption Ontology to trace `DisruptionEvent → Location → Shipment → Risk → Action → AlternativeCarrier`.
-- **Authenticated Human Gate**: Operator Name + PIN authentication enforces human oversight before delivery.
-- **Adaptive Thresholds**: Human review feedback dynamically tunes auto-queue thresholds (-0.05 / +0.05).
+- **Ontology Dashboard**: Interactive visual Mermaid network flowchart mapping `Disruption → Location → Cargo → Risk USD → Action` with dynamic disruption type & severity filters.
+- **Fabric IQ AI Graph Agent**: Natural language graph queries (Cypher queries, node counts, revenue risk, and subgraphs).
+- **One-Click Carrier Booking**: Instant tender execution for backup carriers (`ColdExpress`, `ApexLogistics`) issuing confirmed booking IDs (`BK-2026-XXXX`).
+- **Authenticated Human Gate & RBAC**: Operator Name + PIN authentication with `Supervisor` gate for $10k+ RED tier risks.
+- **Adaptive Thresholds & RLHF Calibration**: Human review feedback dynamically tunes auto-queue thresholds (-0.05 / +0.05) and calibrates model confidence.
 - **Safe Failure Fallbacks**: Malformed or unparseable input routes to Human review; live LLM failures fall back to deterministic stubs.
 
 ### How Codex and GPT-5.6 were used
 
-Codex was used to design the workflow, build the 51-test regression suite, implement ontology models, and create Streamlit UI components. The default demo uses deterministic stubs so judges receive zero-token, reproducible results without API keys.
+Codex was used to design the workflow, build the 57-test regression suite, implement ontology models, and create Streamlit UI components. The default demo uses deterministic stubs so judges receive zero-token, reproducible results without API keys.
 
-FreightDesk also includes an opt-in GPT-5.6 structured-triage path for live carrier text (`OPSCONTROL_USE_OPENAI=1`), falling back safely to deterministic stubs if the API request fails.
+OpsControl also includes an opt-in GPT-5.6 structured-triage path for live carrier text (`OPSCONTROL_USE_OPENAI=1`), falling back safely to deterministic stubs if the API request fails.
 
 ---
 
-## 🔮 What's Next for FreightDesk
+## 🔮 What's Next for OpsControl
 
-While FreightDesk is fully functional today with deterministic demo data, our roadmap focuses on expanding enterprise automation and supply chain intelligence:
+Our roadmap focuses on advancing from our functional v1 implementation to enterprise-scale production deployment across 5 core pillars:
 
-### 1. Live Carrier TMS & AIS Vessel Integration
-- Direct webhook ingestion for real-time EDI 214/315 carrier status updates.
-- Integration with satellite AIS vessel tracking (MarineTraffic/Spire) and port terminal APIs (Savannah, Long Beach, Rotterdam) for live dwell time and weather telemetry.
-
-### 2. Microsoft Fabric IQ & Graph Database Grounding
-- Transitioning in-memory ontology models to **Microsoft Fabric IQ** and **Neo4j** graph databases.
-- Enabling natural language supply chain risk queries via AI Data Agents (e.g., *"What is our total revenue exposure if the Port of Busan closes for 3 days?"*).
-
-### 3. API-Driven Automated Alternative Carrier Booking
-- Extending `MitigationAction` recommendations with direct API spot-rate booking.
-- One-click execution to auto-tender secondary carrier capacity (`AlternativeCarrier`) when lead time is at risk.
-
-### 4. Machine Learning RLHF Threshold Optimization
-- Training machine learning models on operator approval/rejection feedback to continuously refine triage confidence scores and eliminate false escalations.
-
-### 5. Multi-Tenant Enterprise RBAC & SOC2 Compliance
-- Enterprise single sign-on (SSO via Entra ID / Okta), granular role-based access control (RBAC), multi-operator PIN audit trails, and immutable WORM event logging for regulatory compliance.
+| Pillar | Completed v1 Foundation | Production v2 Roadmap |
+|---|---|---|
+| **1. Carrier TMS & AIS Telemetry** | Simulated AIS vessel tracking & port terminal telemetry (`USLGB`, `USSAV`, `NLRTM`) | Direct webhook endpoints for live EDI 214/315 feeds & satellite AIS APIs (MarineTraffic / Spire) |
+| **2. Microsoft Fabric IQ Graph AI** | In-memory supply chain graph agent & Cypher query translator | Enterprise Microsoft Fabric IQ & Neo4j graph database integration for multi-tenant NL queries |
+| **3. Automated Alternative Booking** | One-click backup carrier tender execution (`BK-2026-XXXX`) | Real-time API tender dispatch to secondary carrier TMS endpoints (Project44 / FourKites) |
+| **4. RLHF Model Fine-Tuning** | Dynamic confidence calibration based on operator approval feedback | Continuous offline model fine-tuning on operator approval datasets to eliminate false escalations |
+| **5. Enterprise Security & Compliance** | Operator PIN gate, RBAC roles, and SOC2 WORM JSON log export | Single Sign-On (Entra ID / Okta SSO) and S3 Object Lock immutable compliance storage |
 
 ---
 
@@ -69,7 +62,7 @@ While FreightDesk is fully functional today with deterministic demo data, our ro
 
 No credentials, account, or API key are required for the demo (demo PIN: `2468`).
 
-**Target App URL**: [https://freightdesk.streamlit.app/](https://freightdesk.streamlit.app/) *(mirror: [https://opscontrol.streamlit.app/](https://opscontrol.streamlit.app/))*  
+**Target App URL**: [https://opscontrol.streamlit.app/](https://opscontrol.streamlit.app/) *(mirror: [https://freightdesk.streamlit.app/](https://freightdesk.streamlit.app/))*  
 **GitHub Repository**: [https://github.com/sechan9999/OpsControl](https://github.com/sechan9999/OpsControl)  
 **Devpost Submission**: [https://devpost.com/software/freightdesk](https://devpost.com/software/freightdesk)
 
@@ -77,8 +70,9 @@ No credentials, account, or API key are required for the demo (demo PIN: `2468`)
 
 1. Enter **Name** (`J. Park`) and **Approval PIN** (`2468`) in the sidebar.
 2. Click **Reset desk** → **Replay the Savannah storm (32 messages)**.
-3. Open `OPS-40045-A` in the **Inbox** to inspect assessment, timeline, mitigation actions, and Mermaid cascade graph.
-4. Click **Approve & send** to deliver the customer draft (auto-formatted with `NovaPharm` preferences).
-5. Switch to **Disruption map** tab to view network-wide disruption impact.
-6. Open **Human review** to see low-confidence / malformed cases safely escalated.
-7. Click **Replay again (all duplicates)** to verify idempotency (zero duplicate records).
+3. Open the **Ontology Dashboard** tab to view network-wide disruption cascades and filter by type or severity.
+4. Open `OPS-40045-A` in the **Inbox** to inspect assessment, timeline, mitigation actions, and Mermaid cascade graph.
+5. Expand **🚚 One-Click Alternative Carrier Tender Booking** and execute a backup carrier tender (`ColdExpress`).
+6. Click **Approve & send** to deliver the customer draft (auto-formatted with `NovaPharm` preferences).
+7. Open **Fabric IQ AI Agent** tab to query supply chain exposure in natural language.
+8. Switch to **Activity log** tab and click **Download SOC2 WORM Log (JSON)** to export audit trails.
