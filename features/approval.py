@@ -69,6 +69,7 @@ def send_to_review(
     desk: Desk,
     exception_id: int,
     note: str = "operator requested review",
+    reason: Optional[str] = None,
 ) -> None:
     record = _get_record(desk, exception_id)
 
@@ -77,15 +78,18 @@ def send_to_review(
             f"exception {exception_id} cannot move to review from '{record.status}'"
         )
 
+    actual_note = reason if reason is not None else note
+
     desk.set_status(exception_id, "needs_human_review")
     desk.log("warning", "sent_to_review", id=exception_id, by="operator")
-    record_feedback(desk, exception_id, "sent_to_review", note)
+    record_feedback(desk, exception_id, "sent_to_review", actual_note)
 
 
 def dismiss_exception(
     desk: Desk,
     exception_id: int,
     note: str = "",
+    reason: Optional[str] = None,
 ) -> None:
     record = _get_record(desk, exception_id)
 
@@ -94,9 +98,11 @@ def dismiss_exception(
             f"exception {exception_id} is already terminal ({record.status})"
         )
 
+    actual_note = reason if reason is not None else note
+
     desk.set_status(exception_id, "dismissed")
     desk.log("info", "dismissed", id=exception_id)
-    record_feedback(desk, exception_id, "dismissed", note)
+    record_feedback(desk, exception_id, "dismissed", actual_note)
 
 
 def _get_record(desk: Desk, exception_id: int):

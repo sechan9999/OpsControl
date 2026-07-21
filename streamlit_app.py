@@ -271,10 +271,10 @@ def render_exception(record, namespace: str) -> None:
                 approve_and_send(desk, record.id, subject=subject, body=body)
                 persist_and_rerun()
             if col_b.button("Send to review", key=f"{namespace}-review-{record.id}", use_container_width=True):
-                send_to_review(desk, record.id, reason="operator_escalated")
+                send_to_review(desk, record.id, note="operator_escalated")
                 persist_and_rerun()
             if col_c.button("Dismiss", key=f"{namespace}-dismiss-{record.id}", use_container_width=True):
-                dismiss_exception(desk, record.id, reason="operator_dismissed")
+                dismiss_exception(desk, record.id, note="operator_dismissed")
                 persist_and_rerun()
 
 
