@@ -10,3 +10,7 @@ __pycache__/
 .opscontrol_state.json
 
 artifacts/
+
+# Nested repo copy and scratch context files (not part of the project)
+opscontrol/OpsControl/
+opscontrol/repo_context*.txt
