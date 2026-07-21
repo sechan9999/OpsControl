@@ -44,17 +44,23 @@ OpsControl also includes an opt-in GPT-5.6 structured-triage path for live carri
 
 ---
 
-## 🔮 What's Next for OpsControl
+## What we learned
 
-Our roadmap focuses on advancing from our functional v1 implementation to enterprise-scale production deployment across 5 core pillars:
+For operational AI, trust is earned at the boundaries. The useful product is not a system that always acts autonomously; it is a system that makes routine work easy and makes uncertainty unmistakable. By decoupling multi-channel ingestion, agent investigation, customer preference styling, and operator approval, OpsControl ensures that human operators retain explicit control over external communications while AI absorbs the chaos of carrier data floods.
 
-| Pillar | Completed v1 Foundation | Production v2 Roadmap |
-|---|---|---|
-| **1. Carrier TMS & AIS Telemetry** | Simulated AIS vessel tracking & port terminal telemetry (`USLGB`, `USSAV`, `NLRTM`) | Direct webhook endpoints for live EDI 214/315 feeds & satellite AIS APIs (MarineTraffic / Spire) |
-| **2. Microsoft Fabric IQ Graph AI** | In-memory supply chain graph agent & Cypher query translator | Enterprise Microsoft Fabric IQ & Neo4j graph database integration for multi-tenant NL queries |
-| **3. Automated Alternative Booking** | One-click backup carrier tender execution (`BK-2026-XXXX`) | Real-time API tender dispatch to secondary carrier TMS endpoints (Project44 / FourKites) |
-| **4. RLHF Model Fine-Tuning** | Dynamic confidence calibration based on operator approval feedback | Continuous offline model fine-tuning on operator approval datasets to eliminate false escalations |
-| **5. Enterprise Security & Compliance** | Operator PIN gate, RBAC roles, and SOC2 WORM JSON log export | Single Sign-On (Entra ID / Okta SSO) and S3 Object Lock immutable compliance storage |
+---
+
+## What's next for OpsControl
+
+OpsControl has successfully implemented its core extension points: feed drop batch ingestion (.txt/.jsonl), PIN-gated approval (`2468`), SMTP delivery adapters, customer-specific communication profiles (`NovaPharm`, `Atlanta Retail`), adaptive feedback loops for auto-queue threshold tuning, and a **Microsoft Supply Chain Disruption Ontology** layer that transforms isolated carrier alerts into visual 5-tier disruption graphs (`Disruption Event → Location → Cargo → Risk USD → Action`).
+
+Our next production evolution includes:
+
+1. **Enterprise TMS & Satellite AIS Integration**: Direct EDI 214/315 webhooks, monitored inboxes, and live satellite AIS tracking APIs (MarineTraffic / Spire) replacing simulated telemetry.
+2. **Microsoft Fabric IQ & Graph Database Grounding**: Transitioning our in-memory Fabric IQ agent into enterprise **Microsoft Fabric IQ** and **Neo4j** graph databases for real-time natural language risk queries across global multi-tenant supply networks.
+3. **Automated API Spot Tender Execution**: Connecting our one-click alternative carrier booking engine directly to real-time spot rate APIs (Project44 / FourKites) for instant automated capacity tendering.
+4. **Continuous RLHF Model Fine-Tuning**: Leveraging operator feedback datasets to continuously fine-tune local triage and confidence scoring models, further reducing false escalations.
+5. **SSO & SOC2 WORM Compliance**: Enterprise Single Sign-On (Entra ID / Okta SSO) and S3 Object Lock immutable compliance storage for enterprise audit trails.
 
 ---
 

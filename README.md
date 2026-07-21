@@ -90,9 +90,20 @@ An optional GPT-5.6 structured-triage path is included for live carrier text. Se
 
 ---
 
-## 🚀 Production Integration Path
+## 💡 What We Learned
 
-OpsControl decouples ingestion, triage, investigation, customer profiling, and delivery into stable extension points. Production deployments can connect:
-- **Feeds**: Authenticated EDI 214/315, AIS vessel tracking, and webhook endpoints
-- **Delivery**: Transactional SMTP / SendGrid / Postmark servers
-- **Graph AI**: Microsoft Fabric IQ / Neo4j for natural language supply chain graph queries
+For operational AI, trust is earned at the boundaries. The useful product is not a system that always acts autonomously; it is a system that makes routine work easy and makes uncertainty unmistakable. By decoupling multi-channel ingestion, agent investigation, customer preference styling, and operator approval, OpsControl ensures that human operators retain explicit control over external communications while AI absorbs the chaos of carrier data floods.
+
+---
+
+## 🚀 Production & What's Next Roadmap
+
+OpsControl has successfully implemented its core extension points: feed drop batch ingestion (.txt/.jsonl), PIN-gated approval (`2468`), SMTP delivery adapters, customer-specific communication profiles (`NovaPharm`, `Atlanta Retail`), adaptive feedback loops for auto-queue threshold tuning, and a **Microsoft Supply Chain Disruption Ontology** layer that transforms isolated carrier alerts into visual 5-tier disruption graphs (`Disruption Event → Location → Cargo → Risk USD → Action`).
+
+Our next production evolution includes:
+
+1. **Enterprise TMS & Satellite AIS Integration**: Direct EDI 214/315 webhooks, monitored inboxes, and live satellite AIS tracking APIs (MarineTraffic / Spire) replacing simulated telemetry.
+2. **Microsoft Fabric IQ & Graph Database Grounding**: Transitioning our in-memory Fabric IQ agent into enterprise **Microsoft Fabric IQ** and **Neo4j** graph databases for real-time natural language risk queries across global multi-tenant supply networks.
+3. **Automated API Spot Tender Execution**: Connecting our one-click alternative carrier booking engine directly to real-time spot rate APIs (Project44 / FourKites) for instant automated capacity tendering.
+4. **Continuous RLHF Model Fine-Tuning**: Leveraging operator feedback datasets to continuously fine-tune local triage and confidence scoring models, further reducing false escalations.
+5. **SSO & SOC2 WORM Compliance**: Enterprise Single Sign-On (Entra ID / Okta SSO) and S3 Object Lock immutable compliance storage for enterprise audit trails.
