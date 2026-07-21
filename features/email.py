@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import Optional, Protocol
 
-from opscontrol.models import ExceptionRecord
+from opscontrol.models import Draft
 
 
 @dataclass(frozen=True)
@@ -43,27 +43,29 @@ class DemoEmailSender:
 
 
 def deliver_customer_email(
-    record: ExceptionRecord,
+    draft: Draft,
+    shipment_ref: Optional[str],
+    status: str,
     sender: EmailSender | None = None,
 ) -> DeliveryReceipt:
     """Deliver an operator-approved draft through the configured adapter.
 
+    Accepts the three record fields it actually needs instead of the full
+    ``ExceptionRecord``, reducing coupling to the data model.
+
     The default adapter records deterministic demo delivery and performs no
     network request.
     """
-    if record.status not in {"ready_for_approval", "needs_human_review"}:
+    if status not in {"ready_for_approval", "needs_human_review"}:
         raise ValueError(
-            f"exception {record.id} cannot be delivered from status '{record.status}'"
+            f"cannot deliver from status '{status}'"
         )
 
-    if record.draft is None:
-        raise ValueError(f"exception {record.id} does not have a customer draft")
-
     delivery = sender or DemoEmailSender()
-    reference = record.triage.shipment_ref or f"exception-{record.id}"
+    reference = shipment_ref or f"exception-unknown"
 
     return delivery.send(
         reference=reference,
-        subject=record.draft.email_subject,
-        body=record.draft.email_body,
+        subject=draft.email_subject,
+        body=draft.email_body,
     )

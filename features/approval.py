@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import Optional
 
 from opscontrol.store import Desk
@@ -24,11 +25,16 @@ def approve_and_send(
     if record.draft is None:
         raise ValueError(f"exception {exception_id} does not have a draft")
 
-    if subject is not None:
-        record.draft.email_subject = subject.strip()
-
-    if body is not None:
-        record.draft.email_body = body.strip()
+    if subject is not None or body is not None:
+        new_subject = subject.strip() if subject is not None else record.draft.email_subject
+        new_body = body.strip() if body is not None else record.draft.email_body
+        desk.save_draft(exception_id, replace(
+            record.draft,
+            email_subject=new_subject,
+            email_body=new_body,
+        ))
+        # Reload after save so delivery sees the updated draft
+        record = _get_record(desk, exception_id)
 
     if not record.draft.email_subject:
         raise ValueError("email subject cannot be empty")
@@ -38,7 +44,12 @@ def approve_and_send(
 
     # Delivery occurs before the terminal state transition. If a production
     # adapter fails, the record remains available for operator retry.
-    receipt = deliver_customer_email(record, sender)
+    receipt = deliver_customer_email(
+        record.draft,
+        record.triage.shipment_ref,
+        record.status,
+        sender,
+    )
 
     desk.set_status(exception_id, "sent")
     desk.log(

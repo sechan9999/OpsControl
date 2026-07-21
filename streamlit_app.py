@@ -69,6 +69,22 @@ with st.sidebar:
         "Confidence threshold for auto-queue", 0.50, 0.90, 0.70, 0.05,
         help="Drafts at or above this confidence go to the approval inbox; below it, a human reviews first.",
     )
+    # Live preview — how many records move at this threshold (#5)
+    if desk.exceptions:
+        _preview_ready = sum(
+            1 for r in desk.exceptions.values()
+            if r.assessment and r.assessment.confidence >= threshold
+            and r.status not in ("sent", "dismissed")
+        )
+        _preview_review = sum(
+            1 for r in desk.exceptions.values()
+            if r.assessment and r.assessment.confidence < threshold
+            and r.status not in ("sent", "dismissed")
+        )
+        st.caption(
+            f"At this threshold: **{_preview_ready}** → inbox &nbsp;|&nbsp; **{_preview_review}** → human review"
+        )
+
     st.header("Inject a single message")
     sample_key = st.selectbox("Sample", list(SAMPLE_MESSAGES.keys()))
     custom = st.text_area("Or paste a raw carrier message", height=90, placeholder="STATUS: CNTR ... / any email or SMS text")
@@ -79,6 +95,29 @@ with st.sidebar:
         channel = "email" if custom.strip() else SAMPLE_CHANNELS[sample_key]
         ingest_message(raw, channel, desk, settings)
         persist_and_rerun()
+
+    # Batch inject UI (#4)
+    with st.expander("Batch inject (one message per line)"):
+        batch_channel = st.selectbox(
+            "Channel for all messages",
+            ["edi", "email", "sms", "webhook"],
+            key="batch-channel",
+        )
+        batch_raw = st.text_area(
+            "Paste messages (one per line)",
+            height=120,
+            placeholder="STATUS: CNTR ... HELD SAVANNAH\nreefer alarm OPS-...",
+            key="batch-raw",
+        )
+        if st.button("Inject batch", use_container_width=True, key="batch-inject-btn"):
+            lines = [l.strip() for l in batch_raw.splitlines() if l.strip()]
+            if lines:
+                batch_msgs = [{"raw": l, "channel": batch_channel} for l in lines]
+                ingest_batch(batch_msgs, desk, settings)
+                persist_and_rerun()
+            else:
+                st.warning("No messages to inject.")
+
     st.caption(
         "Demo mode uses a deterministic stub engine (zero tokens, reproducible). "
         "Set OPSCONTROL_DEMO_MODE=0 plus OPSCONTROL_USE_OPENAI=1 and OPENAI_API_KEY to enable live triage. "
@@ -139,9 +178,11 @@ tab_inbox, tab_review, tab_log = st.tabs([
 
 def render_exception(record, namespace: str) -> None:
     triage, assessment, draft = record.triage, record.assessment, record.draft
+    arrived = record.created_at[11:19] if record.created_at else ""  # HH:MM:SS
     title = (
         f"{TIER_BADGE[record.tier]} | {triage.shipment_ref or 'NO-REF'} | "
         f"{triage.exception_type} | sev {triage.severity} | {STATUS_LABEL[record.status]}"
+        + (f" | arrived {arrived}" if arrived else "")
     )
     with st.expander(title, expanded=False):
         left, right = st.columns([3, 2])

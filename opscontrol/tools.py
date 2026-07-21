@@ -1,4 +1,5 @@
 import hashlib
+from typing import Protocol
 
 # Known shipments referenced by the seed data. Unknown refs get a deterministic
 # synthetic record so demos and tests are reproducible.
@@ -29,6 +30,68 @@ PORT_CONDITIONS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Adapter protocol — production deployments replace MockShipmentAdapter
+# ---------------------------------------------------------------------------
+
+class ShipmentAdapter(Protocol):
+    """Contract for shipment data adapters.
+
+    Implement this protocol to connect OpsControl to a live TMS, ERP, or
+    carrier API.  The ``MockShipmentAdapter`` is the deterministic demo
+    implementation used in the public deployment.
+    """
+
+    def lookup(self, ref: str | None) -> dict:
+        """Return shipment details dict, or ``{"error": "..."}`` on failure."""
+        ...
+
+    def port_conditions(self, location: str | None) -> dict:
+        """Return port condition dict, or ``{"error": "..."}`` on failure."""
+        ...
+
+    def eta_impact(self, ref: str | None, delay_hours: float, slack_hours: float) -> dict:
+        """Return ETA impact dict, or ``{"error": "..."}`` on failure."""
+        ...
+
+
+class MockShipmentAdapter:
+    """Credential-free deterministic adapter used by the public demo."""
+
+    def lookup(self, ref: str | None) -> dict:
+        if not ref:
+            return {"error": "missing shipment_ref"}
+        return dict(MOCK_SHIPMENTS.get(ref, _synthetic_shipment(ref)), ref=ref)
+
+    def port_conditions(self, location: str | None) -> dict:
+        if not location:
+            return {"error": "missing location"}
+        cond = PORT_CONDITIONS.get(location.strip().lower())
+        if cond is None:
+            return {"congestion_level": "unknown", "weather": "unknown", "avg_dwell_hours": 6}
+        return dict(cond)
+
+    def eta_impact(self, ref: str | None, delay_hours: float, slack_hours: float) -> dict:
+        if not ref:
+            return {"error": "missing shipment_ref"}
+        delay = float(delay_hours or 0)
+        hours_past = max(0.0, delay - float(slack_hours))
+        return {
+            "delay_hours": delay,
+            "window_missed": hours_past > 0,
+            "hours_past_window": round(hours_past, 1),
+        }
+
+
+# Module-level default — replace this with a production adapter via dependency
+# injection or environment-driven factory without touching any call site.
+default_adapter: ShipmentAdapter = MockShipmentAdapter()
+
+
+# ---------------------------------------------------------------------------
+# Module-level convenience functions (backward-compatible call sites)
+# ---------------------------------------------------------------------------
+
 def _synthetic_shipment(ref: str) -> dict:
     h = int(hashlib.md5(ref.encode()).hexdigest(), 16)
     return {
@@ -42,27 +105,12 @@ def _synthetic_shipment(ref: str) -> dict:
 
 
 def lookup_shipment(ref):
-    if not ref:
-        return {"error": "missing shipment_ref"}
-    return dict(MOCK_SHIPMENTS.get(ref, _synthetic_shipment(ref)), ref=ref)
+    return default_adapter.lookup(ref)
 
 
 def eta_impact(ref, delay_hours, slack_hours):
-    if not ref:
-        return {"error": "missing shipment_ref"}
-    delay = float(delay_hours or 0)
-    hours_past = max(0.0, delay - float(slack_hours))
-    return {
-        "delay_hours": delay,
-        "window_missed": hours_past > 0,
-        "hours_past_window": round(hours_past, 1),
-    }
+    return default_adapter.eta_impact(ref, delay_hours, slack_hours)
 
 
 def port_conditions(location):
-    if not location:
-        return {"error": "missing location"}
-    cond = PORT_CONDITIONS.get(location.strip().lower())
-    if cond is None:
-        return {"congestion_level": "unknown", "weather": "unknown", "avg_dwell_hours": 6}
-    return dict(cond)
+    return default_adapter.port_conditions(location)

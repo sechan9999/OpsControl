@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from typing import Optional
+
 from .models import Assessment, Draft, TriageResult
 
 TYPE_LABEL = {
@@ -9,38 +12,92 @@ TYPE_LABEL = {
 }
 
 
-def compose(t: TriageResult, a: Assessment) -> Draft:
+@dataclass
+class DraftTemplate:
+    """Structured email template — sections are kept separate so downstream
+    transformations (e.g. customer-profile application) can target each part
+    without fragile ``startswith`` / ``endswith`` string matching."""
+
+    greeting: str
+    location_clause: str
+    situation_line: str
+    next_step_line: str
+    closing: str
+    signoff: str
+
+    def render_body(self) -> str:
+        return "\n".join([
+            self.greeting,
+            "",
+            self.location_clause,
+            self.situation_line,
+            self.next_step_line,
+            "",
+            self.closing,
+            "",
+            self.signoff,
+        ])
+
+
+def build_template(
+    t: TriageResult,
+    a: Assessment,
+    greeting: str = "Hello,",
+    signoff: str = "OpsControl Operations",
+) -> DraftTemplate:
     ref = t.shipment_ref or "your shipment"
     label = TYPE_LABEL[t.exception_type]
-    subject = f"Update on {ref}: {label} at {t.location}" if t.location \
-        else f"Update on {ref}: {label}"
+    loc_clause = (
+        f"We want to keep you informed: {ref} is affected by {label} at {t.location}."
+        if t.location
+        else f"We want to keep you informed: {ref} is affected by {label}."
+    )
 
-    lines = [
-        f"Hello,",
-        "",
-        f"We want to keep you informed: {ref} is affected by {label}"
-        + (f" at {t.location}." if t.location else "."),
-    ]
     if a.window_missed:
-        lines.append(
+        situation = (
             "Our assessment shows the scheduled delivery window is at risk. "
             "We are already acting on a mitigation plan and will confirm a revised "
             "delivery time within the next update."
         )
     elif t.delay_hours:
-        lines.append(
+        situation = (
             f"Current estimates indicate a delay of about {t.delay_hours:.0f} hours, "
             "which we expect to absorb within the planned schedule."
         )
     else:
-        lines.append("At this time we do not expect an impact to your delivery schedule.")
-    lines += [
-        f"Next step on our side: {a.recommended_action}",
-        "",
-        "We will follow up as soon as there is a material update. Thank you for your patience.",
-        "",
-        "OpsControl Operations",
-    ]
+        situation = "At this time we do not expect an impact to your delivery schedule."
+
+    return DraftTemplate(
+        greeting=greeting,
+        location_clause=loc_clause,
+        situation_line=situation,
+        next_step_line=f"Next step on our side: {a.recommended_action}",
+        closing="We will follow up as soon as there is a material update. Thank you for your patience.",
+        signoff=signoff,
+    )
+
+
+def compose(
+    t: TriageResult,
+    a: Assessment,
+    greeting: str = "Hello,",
+    signoff: str = "OpsControl Operations",
+) -> Draft:
+    """Compose a customer-ready Draft from triage and assessment results.
+
+    Optional ``greeting`` and ``signoff`` parameters allow caller-supplied
+    customer profile values without requiring a separate post-processing step.
+    """
+    ref = t.shipment_ref or "your shipment"
+    label = TYPE_LABEL[t.exception_type]
+    subject = (
+        f"Update on {ref}: {label} at {t.location}"
+        if t.location
+        else f"Update on {ref}: {label}"
+    )
+
+    template = build_template(t, a, greeting=greeting, signoff=signoff)
+    body = template.render_body()
 
     plan = "\n".join([
         f"- {a.recommended_action}",
@@ -49,4 +106,4 @@ def compose(t: TriageResult, a: Assessment) -> Draft:
         "- Update customer after mitigation is confirmed",
     ])
 
-    return Draft(email_subject=subject, email_body="\n".join(lines), action_plan=plan)
+    return Draft(email_subject=subject, email_body=body, action_plan=plan)

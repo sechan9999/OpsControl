@@ -33,9 +33,20 @@ INFORMATIONAL = ["released", "gate out completed", "no action needed", "easing",
 ESCALATION_WORDS = ["penalty", "pharma", "escalation", "hard delivery window", "urgent"]
 
 
+NEGATION_PATTERNS = re.compile(
+    r"\b(no|not|without|cleared?|resolved?|cancel+ed?|lifted?|easing|eased)"
+    r"\s+\w*(\s+\w+){0,3}\s*",
+    re.IGNORECASE,
+)
+
+
 def _looks_malformed(raw: str) -> bool:
+    if len(raw.encode()) < 10:
+        return True
     words = re.findall(r"[A-Za-z]{2,}", raw)
-    return len(words) < 3 or "@@" in raw or "0x" in raw.lower()
+    has_alphanum_pair = bool(re.search(r"[A-Za-z][0-9]|[0-9][A-Za-z]", raw))
+    clearly_corrupted = "@@" in raw or re.search(r"0x[0-9a-fA-F]{2,}", raw)
+    return len(words) < 3 and not has_alphanum_pair or bool(clearly_corrupted)
 
 
 def _parse_delay_hours(raw: str) -> Optional[float]:
@@ -56,11 +67,23 @@ def _find_location(raw: str) -> Optional[str]:
     return None
 
 
+def _has_negation_near(raw: str, needle: str) -> bool:
+    """Return True when a negation word appears within 5 words before ``needle``."""
+    low = raw.lower()
+    pos = low.find(needle)
+    if pos == -1:
+        return False
+    # examine the 60 characters before the keyword
+    window = low[max(0, pos - 60) : pos]
+    return bool(NEGATION_PATTERNS.search(window))
+
+
 def _classify(raw: str) -> str:
     low = raw.lower()
     for exc_type, needles in TYPE_RULES:
-        if any(n in low for n in needles):
-            return exc_type
+        for needle in needles:
+            if needle in low and not _has_negation_near(raw, needle):
+                return exc_type
     return "UNKNOWN"
 
 

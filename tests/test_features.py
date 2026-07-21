@@ -80,7 +80,12 @@ def test_demo_email_sender_returns_receipt():
     desk = Desk()
     record = make_approval_record(desk)
 
-    receipt = deliver_customer_email(record, DemoEmailSender())
+    receipt = deliver_customer_email(
+        record.draft,
+        record.triage.shipment_ref,
+        record.status,
+        DemoEmailSender(),
+    )
 
     assert receipt.mode == "demo"
     assert receipt.message_id == "demo-OPS-40045-A"
@@ -98,10 +103,13 @@ def test_approve_and_send_applies_operator_edits():
         body="Updated customer body",
     )
 
+    # Re-fetch the record from the desk — Draft is frozen so approve_and_send
+    # saves a new Draft instance via desk.save_draft().
+    updated = desk.exceptions[record.id]
     assert receipt.mode == "demo"
-    assert record.status == "sent"
-    assert record.draft.email_subject == "Updated customer subject"
-    assert record.draft.email_body == "Updated customer body"
+    assert updated.status == "sent"
+    assert updated.draft.email_subject == "Updated customer subject"
+    assert updated.draft.email_body == "Updated customer body"
     assert desk.metrics()["sent"] == 1
     assert any("operator_feedback" in line for line in desk.logs)
 

@@ -142,6 +142,10 @@ def test_desk_snapshot_round_trips(tmp_path):
     snapshot = tmp_path / "desk.json"
     desk.save(snapshot)
 
+    # Verify schema_version is written (#13)
+    raw = json.loads(snapshot.read_text(encoding="utf-8"))
+    assert raw["schema_version"] == 1
+
     restored = Desk.load(snapshot)
     restored_record = restored.exceptions[record.id]
     assert restored.metrics() == desk.metrics()

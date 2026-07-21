@@ -36,11 +36,12 @@ class Assessment:
     trace: list = field(default_factory=list)   # [{round, tool, args, result}]
 
 
-@dataclass
+@dataclass(frozen=True)
 class Draft:
     email_subject: str
     email_body: str
     action_plan: str
+
 
 
 @dataclass

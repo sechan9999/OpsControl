@@ -10,8 +10,11 @@ from .models import Assessment, Draft, ExceptionRecord, TriageResult
 TIER_ORDER = {"red": 0, "orange": 1, "green": 2}
 
 
+SCHEMA_VERSION = 1
+
+
 def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%H:%M:%S")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def normalize_hash(raw: str) -> str:
@@ -32,7 +35,12 @@ class Desk:
     def log(self, level: str, event: str, **kw) -> None:
         rest = " ".join(f"{k}={v}" for k, v in kw.items())
         self.logs.insert(0, f"{_now()} {level.upper():<7} {event} {rest}".rstrip())
-        del self.logs[400:]
+        if len(self.logs) > 400:
+            self.logs.insert(
+                0,
+                f"{_now()} WARNING log_truncated kept=400 dropped={len(self.logs) - 400}",
+            )
+            del self.logs[400:]
 
     def seen_or_add(self, raw: str) -> bool:
         message_hash = normalize_hash(raw)
@@ -99,7 +107,15 @@ class Desk:
 
         try:
             snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            saved_version = snapshot.get("schema_version", 0)
             desk = cls()
+            if saved_version != SCHEMA_VERSION:
+                desk.log(
+                    "warning",
+                    "snapshot_version_mismatch",
+                    saved=saved_version,
+                    expected=SCHEMA_VERSION,
+                )
             desk._hashes = set(snapshot["hashes"])
             desk.logs = list(snapshot["logs"])
             desk.counters = dict(snapshot["counters"])
@@ -120,6 +136,7 @@ class Desk:
     def save(self, path: str | Path) -> None:
         snapshot_path = Path(path)
         snapshot = {
+            "schema_version": SCHEMA_VERSION,
             "hashes": sorted(self._hashes),
             "exceptions": [asdict(record) for record in self.exceptions.values()],
             "logs": self.logs,
