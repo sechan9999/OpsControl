@@ -168,3 +168,52 @@ def test_live_triage_requires_explicit_demo_opt_out(monkeypatch):
     monkeypatch.setenv("OPSCONTROL_USE_OPENAI", "1")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     assert settings_from_env().use_openai is True
+
+
+def test_legacy_snapshot_loading_handles_missing_fields(tmp_path):
+    legacy_json = {
+        "schema_version": 1,
+        "hashes": ["hash123"],
+        "counters": {"ingested": 1, "duplicates": 0, "sent": 0},
+        "next_msg": 2,
+        "next_exc": 2,
+        "logs": [],
+        "exceptions": [
+            {
+                "id": 1,
+                "message_id": 1,
+                "raw": "STATUS: CNTR HELD SAVANNAH",
+                "channel": "edi",
+                "triage": {
+                    "shipment_ref": "OPS-40021-A",
+                    "exception_type": "PORT_DELAY",
+                    "location": "Port of Savannah",
+                    "severity": 3,
+                    "summary": "Held at Savannah",
+                    "customer_impact": "Delayed",
+                    "delay_hours": 12.0
+                },
+                "tier": "orange",
+                "status": "ready_for_approval",
+                "assessment": {
+                    "impact_summary": "Delayed",
+                    "window_missed": False,
+                    "affected_value": 0.0,
+                    "confidence": 0.8,
+                    "recommended_action": "Wait",
+                    "rounds_used": 1,
+                    "trace": []
+                },
+                "draft": None,
+                "created_at": "2026-07-21 00:00:00"
+            }
+        ]
+    }
+    file_path = tmp_path / "legacy.json"
+    file_path.write_text(json.dumps(legacy_json), encoding="utf-8")
+
+    desk = Desk.load(file_path)
+    rec = desk.exceptions[1]
+    assert getattr(rec.triage, "severity_label", "Medium") == "Medium"
+    assert getattr(rec.triage, "estimated_duration_days", None) is None
+    assert getattr(rec.assessment, "mitigation_actions", []) == []

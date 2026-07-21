@@ -210,14 +210,16 @@ def render_exception(record, namespace: str) -> None:
         with left:
             st.markdown(f"**Summary:** {triage.summary}")
             st.markdown(f"**Customer impact:** {triage.customer_impact}")
-            if triage.estimated_duration_days:
-                st.markdown(f"**Est. disruption duration:** {triage.estimated_duration_days} days")
+            est_duration = getattr(triage, "estimated_duration_days", None)
+            if est_duration:
+                st.markdown(f"**Est. disruption duration:** {est_duration} days")
             if assessment:
                 st.markdown(f"**Assessment:** {assessment.impact_summary}")
                 conf_label = getattr(assessment, "confidence_label", "Medium")
+                time_days = getattr(assessment, "time_to_impact_days", None)
                 time_impact = (
-                    f"⏱ {assessment.time_to_impact_days:.1f}d to window"
-                    if assessment.time_to_impact_days is not None and assessment.time_to_impact_days > 0
+                    f"⏱ {time_days:.1f}d to window"
+                    if time_days is not None and time_days > 0
                     else ("⚠ window MISSED" if assessment.window_missed else "window holds")
                 )
                 st.markdown(
@@ -225,9 +227,10 @@ def render_exception(record, namespace: str) -> None:
                     f"**Timeline:** {time_impact} | "
                     f"**At risk:** ${assessment.affected_value:,.0f}"
                 )
-                if assessment.mitigation_actions:
+                mitigation_actions = getattr(assessment, "mitigation_actions", [])
+                if mitigation_actions:
                     st.markdown("**Structured Mitigation Cascade (Ontology Grounded):**")
-                    for act in assessment.mitigation_actions:
+                    for act in mitigation_actions:
                         cost_str = f" • Est cost: ${act.estimated_cost_usd:,.0f}" if act.estimated_cost_usd else ""
                         saved_str = f" • Save {act.lead_time_saved_days}d" if act.lead_time_saved_days else ""
                         st.markdown(f"• `{act.action_type}`: {act.description}{cost_str}{saved_str}")
