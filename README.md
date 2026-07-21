@@ -1,72 +1,92 @@
-# OpsControl
+# FreightDesk (OpsControl)
 
-Freight Desk OpsControl is a human-in-the-loop operations exception desk for freight teams. It converts a surge of carrier updates into a prioritized queue, impact assessments, customer-ready drafts, and a focused review list.
-https://devpost.com/software/freightdesk
+**FreightDesk** (OpsControl) is an AI-powered human-in-the-loop exception desk for freight operations. It converts a chaotic surge of carrier updates into a prioritized queue, impact assessments grounded in the **Microsoft Supply Chain Ontology**, customer-ready drafts, interactive cascade graphs, and an operator-gated review surface.
 
-## Live demo
+👉 **Devpost Submission:** [devpost.com/software/freightdesk](https://devpost.com/software/freightdesk)  
+👉 **GitHub Repo:** [github.com/sechan9999/OpsControl](https://github.com/sechan9999/OpsControl)
 
-[opscontrol.streamlit.app](https://opscontrol.streamlit.app/)
+---
 
-The deployed demo uses deterministic scenario data. No account, API key, or credentials are required for judges.
+## 🌐 Live Demo
 
-### Judge test path
+[**freightdesk.streamlit.app**](https://freightdesk.streamlit.app/) *(also available at [opscontrol.streamlit.app](https://opscontrol.streamlit.app/))*
 
-1. Click **Reset desk**.
-2. Click **Replay the Savannah storm (32 messages)**.
-3. Open the top red item, `OPS-40045-A`, and inspect the assessment, five-round trace, draft, and action plan.
-4. Click **Approve & send** to exercise the required human approval step.
-5. Open **Human review** to inspect ambiguous and malformed input safely escalated to an operator.
-6. Click **Replay again (all duplicates)** to verify that repeated deliveries do not create new work.
+The deployed demo uses deterministic scenario data. No account, API key, or credentials are required for judges (demo operator PIN: `2468`).
 
-## What it demonstrates
+### 🎯 Judge Test Path
 
-- Normalized-message idempotency: three duplicate deliveries are identified during the 32-message replay.
-- Bounded investigation: each assessment uses at most five tool rounds.
-- Prioritized risk: the pharma escalation `OPS-40045-A` has a missed window and $25,000 at risk.
-- Human control: customer communication is editable and cannot be marked sent without approval.
-- Safe failure handling: malformed and low-confidence updates appear in Human review instead of being silently guessed or discarded.
+1. Enter **Operator Name** (e.g. `J. Park`) and **Approval PIN** (`2468`) in the sidebar.
+2. Click **Reset desk** to start clean.
+3. Click **Replay the Savannah storm (32 messages)** to ingest 32 realistic freight alerts.
+4. Open the top red item (`OPS-40045-A` - temperature-sensitive pharma) in the **Inbox**:
+   - Inspect the **Severity label** (`Critical`), **Timeline** (`⏱ 0.0d to window`), and **Structured Mitigation Cascade** with estimated costs and lead time saved.
+   - View the interactive **Mermaid Ontology Cascade Graph** (`Disruption → Location → Shipment → Risk → Action`).
+   - Edit the customer draft (auto-formatted with `NovaPharm` formal preferences).
+5. Click **Approve & send** (gated by operator authentication) to deliver the draft.
+6. Switch to the **Disruption map** tab to inspect active disruptions across network nodes.
+7. Open **Human review** to inspect unclassified or low-confidence updates safely escalated for operator judgment.
+8. Click **Replay again (all duplicates)** to verify idempotency (zero duplicate records created).
 
-## Run locally
+---
+
+## ⚡ Key Features & Ontology Integration
+
+- **Microsoft Supply Chain Disruption Ontology**: 7-entity cascade model connecting `DisruptionEvent → Location → Shipment → RiskAssessment → MitigationAction → AlternativeCarrier`.
+- **Expanded Disruption Types**: Classifies `PORT_DELAY`, `CUSTOMS_HOLD`, `REEFER_TEMP`, `VESSEL_ROLLOVER`, `GEOPOLITICAL` (strikes/sanctions), `CYBER_ATTACK` (ransomware), `FINANCIAL_FAILURE` (carrier bankruptcy), and `PANDEMIC`.
+- **Structured Mitigation Actions**: Ranks typed actions (`REROUTE`, `ACTIVATE_ALTERNATIVE_CARRIER`, `EXPEDITE_SHIPMENT`, `CUSTOMS_EXPEDITE`) with cost estimates ($) and lead time saved (days).
+- **Idempotency & Deduplication**: SHA-256 hash dedup filters repeated carrier signals without duplicating work.
+- **Authenticated Approval Gate**: Operator Name + PIN authentication (`2468`) with audit trail logging (`by=J. Park`).
+- **Adaptive Feedback Loop**: Operator approvals/escalations dynamically adjust type-specific confidence thresholds (-0.05 / +0.05).
+- **Multi-Channel & Feed Drop Ingestion**: Supports manual injection, EDI/SMS/Email text parsing, and `.txt` / `.jsonl` feed drop file uploads.
+
+---
+
+## 💻 Run Locally
 
 ```bash
 python -m pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
-Run the regression suite:
+Run the 51-test regression suite:
 
 ```bash
-python -m pytest
+python -m pytest tests/ -v
 ```
 
-## OpenAI and Codex
+---
 
-OpsControl was built with Codex to scaffold the workflow, implement guardrails, and create regression coverage. The default demo uses deterministic triage so judges receive the same result without credentials.
+## 🤖 OpenAI & Codex
 
-An optional GPT-5.6 structured-triage path is included for local use. Keep secrets out of Git: set `OPSCONTROL_DEMO_MODE=0`, `OPSCONTROL_USE_OPENAI=1`, and `OPENAI_API_KEY` in an untracked `.env` file or in Streamlit secrets. The application falls back to deterministic triage if a live request fails.
+Built with Codex for rapid agent workflow design, ontology modeling, and 100% test coverage. The default demo uses deterministic stubs so judges receive reproducible results without tokens or credentials.
 
-## Project structure
+An optional GPT-5.6 structured-triage path is included for live carrier text. Set `OPSCONTROL_DEMO_MODE=0`, `OPSCONTROL_USE_OPENAI=1`, and `OPENAI_API_KEY` in Streamlit secrets or `.env`.
 
-- `streamlit_app.py` - operator control surface
-- `features/` - ingestion, approval, delivery, customer-profile, and feedback extension points
-- `features/ingest.py` - validated single-message and batch ingestion
-- `features/approval.py` - operator-controlled approval, review, and dismissal actions
-- `features/email.py` - credential-free demo delivery adapter and production sender contract
-- `features/customer_profile.py` - customer communication preference model
-- `features/feedback_loop.py` - structured operator outcome events
-- `opscontrol/` - triage, investigation, composition, storage, and workflow engine
-- `data/savannah_storm.jsonl` - deterministic 32-message scenario
-- `tests/` - replay, guardrail, and feature tests
-- `docs/PRD.md` - product requirements
-- `docs/seed-data-spec.md` - scenario contract
-- `docs/submission-checklist.md` - final hackathon submission checklist
+---
 
-## Production integration path
+## 📂 Project Structure
 
-OpsControl now separates ingestion, approval, delivery, customer preferences, and
-operator feedback into dedicated feature modules. The public deployment continues
-to use deterministic scenario data and a no-network delivery adapter.
+- `streamlit_app.py` - FreightDesk Streamlit dashboard & interactive cascade graph renderer
+- `features/` - Extension modules:
+  - `features/approval.py` - Gated approval, PIN verification, and review escalation
+  - `features/ingest.py` - Single message, batch, and feed drop (.txt / .jsonl) ingestion
+  - `features/email.py` - SMTP delivery adapter with mock fallback
+  - `features/customer_profile.py` - Built-in customer communication profiles (`NovaPharm`, `Atlanta Retail`)
+  - `features/feedback_loop.py` - Adaptive threshold feedback loops & audit events
+- `opscontrol/` - Core decision engine:
+  - `opscontrol/models.py` - Ontology dataclasses (`TriageResult`, `Assessment`, `MitigationAction`, `AlternativeCarrier`, `Draft`, `ExceptionRecord`)
+  - `opscontrol/agent.py` - Bounded 5-round investigation loop & mitigation action generator
+  - `opscontrol/triage.py` - Rule engine with 12 disruption categories & negation guards
+  - `opscontrol/tools.py` - Shipment adapter, port conditions, and alternative carrier lookup
+  - `opscontrol/composer.py` - Structured `DraftTemplate` composition
+  - `opscontrol/store.py` - `Desk` state manager & versioned JSON persistence (v2)
+- `tests/` - 51 unit tests (`test_engine.py`, `test_features.py`, `test_ontology.py`, `test_tiering.py`)
 
-Production deployments can implement these extension points with authenticated
-EDI 214/315 feeds, monitored email inboxes, signed webhooks, transactional email
-providers, tenant-level customer profiles, and persisted review feedback.
+---
+
+## 🚀 Production Integration Path
+
+FreightDesk decouples ingestion, triage, investigation, customer profiling, and delivery into stable extension points. Production deployments can connect:
+- **Feeds**: Authenticated EDI 214/315, AIS vessel tracking, and webhook endpoints
+- **Delivery**: Transactional SMTP / SendGrid / Postmark servers
+- **Graph AI**: Microsoft Fabric IQ / Neo4j for natural language supply chain graph queries
