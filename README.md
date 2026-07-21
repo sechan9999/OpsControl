@@ -90,6 +90,14 @@ An optional GPT-5.6 structured-triage path is included for live carrier text. Se
 
 ---
 
+## 🛠️ How We Built It
+
+The build ran from a written PRD with structured milestones, executed in Codex with GPT-5.6: a Streamlit control surface backed by an in-memory decision engine (`Desk`) with versioned JSON state persistence, a bounded investigation agent with function tools (`lookup_shipment`, `eta_impact`, `port_conditions`, `alternative_carriers`), a **Microsoft Supply Chain Disruption Ontology** 7-entity cascade model (`DisruptionEvent → Location → Shipment → Risk → Action → AlternativeCarrier`), a confidence-routed mitigation composer, an **Ontology Cascade Dashboard** with interactive Mermaid flowcharts, and a 57-test regression suite.
+
+At runtime GPT-5.6 handles three key jobs: triage parsing across 12 disruption categories, agent reasoning over tools, and customer comms drafting. The demo replays 32 realistic seed messages — including three exact duplicates, malformed feed input, and a coherent Savannah storm cluster featuring a $25,000 OTIF penalty pharma escalation.
+
+---
+
 ## 💡 What We Learned
 
 For operational AI, trust is earned at the boundaries. The useful product is not a system that always acts autonomously; it is a system that makes routine work easy and makes uncertainty unmistakable. By decoupling multi-channel ingestion, agent investigation, customer preference styling, and operator approval, OpsControl ensures that human operators retain explicit control over external communications while AI absorbs the chaos of carrier data floods.

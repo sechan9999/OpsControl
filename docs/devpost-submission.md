@@ -36,11 +36,30 @@ OpsControl treats reliability as a core product requirement:
 - **Adaptive Thresholds & RLHF Calibration**: Human review feedback dynamically tunes auto-queue thresholds (-0.05 / +0.05) and calibrates model confidence.
 - **Safe Failure Fallbacks**: Malformed or unparseable input routes to Human review; live LLM failures fall back to deterministic stubs.
 
-### How Codex and GPT-5.6 were used
+---
 
-Codex was used to design the workflow, build the 57-test regression suite, implement ontology models, and create Streamlit UI components. The default demo uses deterministic stubs so judges receive zero-token, reproducible results without API keys.
+## How we built it
 
-OpsControl also includes an opt-in GPT-5.6 structured-triage path for live carrier text (`OPSCONTROL_USE_OPENAI=1`), falling back safely to deterministic stubs if the API request fails.
+The build ran from a written PRD with structured milestones, executed in Codex with GPT-5.6: a Streamlit control surface backed by an in-memory decision engine (`Desk`) with versioned JSON state persistence, a bounded investigation agent with function tools (`lookup_shipment`, `eta_impact`, `port_conditions`, `alternative_carriers`), a **Microsoft Supply Chain Disruption Ontology** 7-entity cascade model (`DisruptionEvent → Location → Shipment → Risk → Action → AlternativeCarrier`), a confidence-routed mitigation composer, an **Ontology Cascade Dashboard** with interactive Mermaid flowcharts, and a 57-test regression suite.
+
+At runtime GPT-5.6 handles three key jobs: triage parsing across 12 disruption categories, agent reasoning over tools, and customer comms drafting. The demo replays 32 realistic seed messages — including three exact duplicates, malformed feed input, and a coherent Savannah storm cluster featuring a $25,000 OTIF penalty pharma escalation.
+
+---
+
+## Challenges we ran into
+
+The interesting problem was not producing a draft. It was deciding when not to trust one. Freight messages can be incomplete, duplicated, or corrupted, so the workflow needed to make uncertainty operationally useful rather than hide it. That led to four core design constraints: suppress repeat signals via SHA-256 hash deduplication, cap investigation work at 5 tool rounds, route low-confidence or unclassified cases to a dedicated human-review queue, and enforce operator authentication (Name + PIN `2468` & RBAC permissions) before external delivery.
+
+We also treated demo reliability as a product requirement. A judge should be able to refresh the page, replay the 32-message scenario, and see the exact same decision flow, live AIS vessel telemetry, and ontology cascade graphs without relying on an external network call or a lucky model response.
+
+---
+
+## Accomplishments that we're proud of
+
+- **Guardrails as product features, not afterthoughts**: Idempotent ingestion, bounded agent loops, PIN-gated approval, and confidence-based escalation are all visible in the UI — the duplicates-dropped counter, adaptive threshold expander, and human-review queue are part of the demo, not buried in server logs.
+- **Supply Chain Disruption Ontology Integration**: Transforming isolated carrier alerts into structured 5-tier disruption cascades (`Disruption → Location → Cargo → Risk USD → Action`), paired with an interactive **Fabric IQ AI Graph Agent** that answers natural language supply chain questions with Cypher queries and subgraphs.
+- **Actionable Operational Remediation**: One-click alternative carrier tender booking (`ColdExpress`, `ApexLogistics`) issuing confirmed booking IDs (`BK-2026-XXXX`), live AIS vessel tracking telemetry, and SOC2 WORM compliant audit log exports.
+- **A complete product experience in four days**: Not a chat wrapper, but an operations desk a judge can click through end-to-end with seeded data. The demo's emotional arc reflects real ops: a storm floods the queue, and a temperature-sensitive pharma load with a hard Thursday window and a $25,000 OTIF penalty surfaces to the top with a ready-to-send plan and an approved backup carrier tender. OpsControl turns a flood of carrier updates into a prioritized freight exception queue, customer-ready drafts, and a focused human-review list.
 
 ---
 
