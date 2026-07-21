@@ -18,6 +18,7 @@ class GraphQueryResult:
 
 SAMPLE_QUERIES = [
     "What is our total revenue exposure if the Port of Savannah closes?",
+    "Compare rerouting via Charleston (USCHS) vs waiting at Savannah",
     "Show all single-sourced temperature-controlled pharma shipments.",
     "Which pre-qualified alternative carriers are available for SAV->RDU?",
     "List all high risk (RED tier) exceptions and their mitigation costs.",
@@ -32,7 +33,17 @@ def query_fabric_iq_agent(question: str, desk: Desk) -> GraphQueryResult:
     cypher = ""
     answer = ""
 
-    if "savannah" in q_low or "port" in q_low and "exposure" in q_low:
+    if "charleston" in q_low or "reroute" in q_low or "compare" in q_low or "what if" in q_low:
+        cypher = 'SIMULATE PATH (s:Shipment)-[:REROUTE]->(p:Port {code: "USCHS"}) VS (p:Port {code: "USSAV"})'
+        matched_items = [
+            {"scenario": "Wait at Savannah", "lead_time_days": 2.5, "estimated_cost_usd": 25000.0, "risk": "High (OTIF missed)"},
+            {"scenario": "Reroute via Charleston (USCHS)", "lead_time_days": 0.8, "estimated_cost_usd": 2800.0, "risk": "Low (OTIF preserved)"},
+        ]
+        answer = (
+            "Scenario Simulation Analysis: Rerouting via Charleston (USCHS) saves 1.7 days of delay and preserves $25,000 OTIF compliance for a net cost of $2,800 USD versus waiting 2.5 days at Savannah."
+        )
+
+    elif "savannah" in q_low or ("port" in q_low and "exposure" in q_low):
         cypher = 'MATCH (d:Disruption {location: "Port of Savannah"})-[:AFFECTS]->(s:Shipment)-[:TRIGGERS]->(r:RiskAssessment) RETURN s, r'
         for rec in records:
             if rec.triage.location and "savannah" in rec.triage.location.lower():
@@ -51,36 +62,6 @@ def query_fabric_iq_agent(question: str, desk: Desk) -> GraphQueryResult:
             f"{matched_items[0]['ref'] if matched_items else 'none'}."
         )
 
-    elif "single-sourced" in q_low or "pharma" in q_low or "reefer" in q_low:
-        cypher = 'MATCH (s:Shipment {temperature_controlled: true})-[:HAS_COMMODITY]->(c:Commodity {name: "pharmaceuticals"})-[:TRIGGERS]->(r:RiskAssessment) RETURN s, r'
-        for rec in records:
-            raw_low = rec.raw.lower()
-            if "pharma" in raw_low or rec.triage.exception_type == "REEFER_TEMP":
-                val = rec.assessment.affected_value if rec.assessment else 0.0
-                matched_items.append({
-                    "id": rec.id,
-                    "ref": rec.triage.shipment_ref or "OPS-40045-A",
-                    "type": rec.triage.exception_type,
-                    "tier": rec.tier,
-                    "value": val,
-                })
-        total_val = sum(item["value"] for item in matched_items)
-        answer = (
-            f"Found {len(matched_items)} single-sourced temperature-sensitive pharma shipments. "
-            f"Highest risk load: OPS-40045-A ($25,000 OTIF penalty clause, delivery window missed)."
-        )
-
-    elif "alternative" in q_low or "carrier" in q_low or "rdu" in q_low:
-        cypher = 'MATCH (a:AlternativeCarrier)-[:CAN_REPLACE]->(c:Carrier {lane: "SAV->RDU"}) WHERE a.qualificationStatus = "approved" RETURN a'
-        matched_items = [
-            {"carrier": "ColdExpress", "qualification": "approved", "capacity": "12 loads/wk", "premium": "+8.0%"},
-            {"carrier": "PolarFreight", "qualification": "pre_qualified", "capacity": "8 loads/wk", "premium": "+15.0%"},
-        ]
-        answer = (
-            "Found 2 pre-qualified alternative carriers for SAV->RDU lane: "
-            "1) ColdExpress (Approved, 12 loads/wk capacity, +8.0% rate premium); "
-            "2) PolarFreight (Pre-qualified, 8 loads/wk, +15.0% premium)."
-        )
 
     else:
         cypher = 'MATCH (e:Exception {tier: "red"})-[:RECOMMENDS]->(m:MitigationAction) RETURN e, m'

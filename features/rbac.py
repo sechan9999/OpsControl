@@ -1,6 +1,8 @@
+import hashlib
 import json
 from dataclasses import dataclass
 from typing import List
+
 
 ROLES = ["Operator", "Supervisor", "Auditor"]
 
@@ -45,10 +47,50 @@ def can_user_approve_record(role: str, tier: str, affected_value: float) -> bool
 
 
 def export_soc2_audit_logs_json(logs: List[str]) -> str:
-    """Generate SOC2 WORM compliant audit log export in JSON format."""
+    """Generate SOC2 WORM compliant audit log export in JSON format with SHA-256 cryptographic hash chaining."""
+    blocks = []
+    prev_hash = "0" * 64
+    for idx, log_line in enumerate(logs):
+        payload = f"{idx}:{prev_hash}:{log_line}"
+        block_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        blocks.append({
+            "index": idx,
+            "previous_hash": prev_hash,
+            "block_hash": block_hash,
+            "event": log_line,
+        })
+        prev_hash = block_hash
+
     export_payload = {
         "export_standard": "SOC2_WORM_V1",
+        "crypto_schema": "SHA-256_HASH_CHAIN",
         "total_events": len(logs),
+        "worm_root_hash": prev_hash,
         "logs": logs,
+        "hash_chain": blocks,
     }
     return json.dumps(export_payload, indent=2)
+
+
+def verify_soc2_audit_chain(json_str: str) -> bool:
+    """Verify cryptographic integrity of SOC2 WORM audit log export payload."""
+    try:
+        data = json.loads(json_str)
+        logs = data.get("logs", [])
+        chain = data.get("hash_chain", [])
+        if len(logs) != len(chain):
+            return False
+        prev_hash = "0" * 64
+        for idx, block in enumerate(chain):
+            if logs[idx] != block["event"]:
+                return False
+            if block["previous_hash"] != prev_hash:
+                return False
+            expected_hash = hashlib.sha256(f"{idx}:{prev_hash}:{block['event']}".encode("utf-8")).hexdigest()
+            if block["block_hash"] != expected_hash:
+                return False
+            prev_hash = expected_hash
+        return data.get("worm_root_hash") == prev_hash
+    except Exception:
+        return False
+

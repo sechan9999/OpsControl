@@ -18,6 +18,32 @@ class TenderBookingReceipt:
     status: str  # confirmed, in_progress, completed
 
 
+@dataclass(frozen=True)
+class TenderFinancialTradeoff:
+    otif_penalty_saved_usd: float
+    backup_carrier_cost_usd: float
+    net_benefit_usd: float
+    roi_percentage: float
+
+
+def calculate_tender_tradeoff(record, carrier: AlternativeCarrier) -> TenderFinancialTradeoff:
+    """Calculate net financial ROI of activating a backup carrier tender."""
+    affected_val = record.assessment.affected_value if (record and record.assessment) else 25000.0
+    cost = float(affected_val * (carrier.price_premium_pct or 10.0) / 100.0)
+    cost = max(800.0, cost)
+    # Estimate OTIF penalty/spoilage saved based on risk exposure
+    otif_saved = float(affected_val)
+    net_benefit = otif_saved - cost
+    roi = (net_benefit / cost * 100.0) if cost > 0 else 0.0
+    return TenderFinancialTradeoff(
+        otif_penalty_saved_usd=round(otif_saved, 2),
+        backup_carrier_cost_usd=round(cost, 2),
+        net_benefit_usd=round(net_benefit, 2),
+        roi_percentage=round(roi, 1),
+    )
+
+
+
 def execute_alternative_carrier_booking(
     desk: Desk,
     exception_id: int,

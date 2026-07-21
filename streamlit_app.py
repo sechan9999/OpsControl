@@ -3,13 +3,21 @@ import os
 from dataclasses import replace
 from pathlib import Path
 
+import pandas as pd
+import pydeck as pdk
 import streamlit as st
 
 from features.approval import approve_and_send, dismiss_exception, send_to_review, verify_pin
-from features.booking import execute_alternative_carrier_booking
+from features.booking import calculate_tender_tradeoff, execute_alternative_carrier_booking
 from features.email import get_default_sender
 from features.ingest import ingest_batch, ingest_message, parse_feed_drop_content
-from features.rbac import ROLES, can_user_approve_record, export_soc2_audit_logs_json, get_role_permissions
+from features.rbac import (
+    ROLES,
+    can_user_approve_record,
+    export_soc2_audit_logs_json,
+    get_role_permissions,
+    verify_soc2_audit_chain,
+)
 from opscontrol.config import Settings, settings_from_env
 from opscontrol.graph_agent import SAMPLE_QUERIES, query_fabric_iq_agent
 from opscontrol.store import Desk
@@ -328,8 +336,14 @@ def render_exception(record, namespace: str) -> None:
                 with st.expander("🚚 One-Click Alternative Carrier Tender Booking", expanded=False):
                     alt_names = [f"{a.name} ({a.capacity_available}, +{a.price_premium_pct:.1f}% cost, {a.qualification_status})" for a in alts]
                     selected_idx = st.selectbox("Select Pre-Qualified Backup Carrier", range(len(alts)), format_func=lambda i: alt_names[i], key=f"{namespace}-alt-sel-{record.id}")
+                    selected_carrier = alts[selected_idx]
+                    tradeoff = calculate_tender_tradeoff(record, selected_carrier)
+                    tc1, tc2, tc3 = st.columns(3)
+                    tc1.metric("OTIF Penalty Saved", f"${tradeoff.otif_penalty_saved_usd:,.0f}")
+                    tc2.metric("Backup Tender Cost", f"${tradeoff.backup_carrier_cost_usd:,.0f}")
+                    tc3.metric("Net Financial ROI", f"${tradeoff.net_benefit_usd:,.0f}", delta=f"{tradeoff.roi_percentage:+.1f}% ROI")
                     if st.button("Execute Carrier Tender Booking", key=f"{namespace}-tender-btn-{record.id}"):
-                        receipt = execute_alternative_carrier_booking(desk, record.id, alts[selected_idx], operator_name=operator_name.strip() or "Operator")
+                        receipt = execute_alternative_carrier_booking(desk, record.id, selected_carrier, operator_name=operator_name.strip() or "Operator")
                         st.success(f"Tender #{receipt.booking_id} confirmed with {receipt.carrier_name} for ${receipt.estimated_cost_usd:,.0f} USD.")
                         persist_and_rerun()
 
@@ -461,31 +475,99 @@ with tab_agent:
     st.subheader("🌐 Microsoft Fabric IQ AI Graph Agent")
     st.markdown("Ask natural language questions grounded in the supply chain disruption ontology graph.")
 
-    q_choice = st.selectbox("Sample Queries", SAMPLE_QUERIES, key="graph-q-choice")
+    q_choice = st.selectbox("Sample Queries & Scenario Simulations", SAMPLE_QUERIES, key="graph-q-choice")
     user_q = st.text_input("Or type your supply chain question", value=q_choice, key="graph-q-input")
 
     if st.button("Query Fabric IQ Agent", type="primary", key="query-agent-btn"):
         res = query_fabric_iq_agent(user_q, desk)
-        st.success(f"**Agent Response:** {res.summary_answer}")
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
+        st.session_state.chat_history.append((user_q, res))
 
-        ca, cb = st.columns([1, 1])
-        with ca:
-            st.markdown("**Cypher Graph Traversal Query**")
-            st.code(res.cypher_query, language="cypher")
-            st.metric("Matched Graph Nodes", res.affected_nodes)
-            st.metric("Total Revenue Exposure", f"${res.revenue_at_risk_usd:,.0f} USD")
-        with cb:
-            st.markdown("**Grounding Graph Subgraph**")
-            st.markdown(res.mermaid_subgraph)
-            if res.matched_records:
-                st.markdown("**Matched Network Entities**")
-                st.json(res.matched_records, expanded=False)
+    if st.session_state.get("chat_history"):
+        st.markdown("### 💬 Agent Conversation & Reasoning History")
+        for q_text, res in reversed(st.session_state.chat_history):
+            with st.expander(f"🔎 {q_text}", expanded=True):
+                st.success(f"**Agent Response:** {res.summary_answer}")
+                ca, cb = st.columns([1, 1])
+                with ca:
+                    st.markdown("**Cypher Graph Traversal / Simulation Query**")
+                    st.code(res.cypher_query, language="cypher")
+                    st.metric("Matched Graph Nodes", res.affected_nodes)
+                    st.metric("Total Revenue Exposure", f"${res.revenue_at_risk_usd:,.0f} USD")
+                with cb:
+                    st.markdown("**Grounding Graph Subgraph**")
+                    st.markdown(res.mermaid_subgraph)
+                    if res.matched_records:
+                        st.markdown("**Matched Network Entities**")
+                        st.json(res.matched_records, expanded=False)
 
 with tab_map:
     if not open_records:
         st.info("No active disruptions on network.")
     else:
-        st.subheader("Active Disruption Overview")
+        st.subheader("🗺️ Interactive Geospatial Disruption Map (PyDeck Telemetry)")
+        NODE_COORDINATES = {
+            "savannah": [32.0835, -81.0998],
+            "long beach": [33.7701, -118.1937],
+            "rotterdam": [51.9244, 4.4777],
+            "busan": [35.1796, 129.0756],
+            "atlanta": [33.7490, -84.3880],
+            "raleigh": [35.7796, -78.6382],
+            "memphis": [35.1495, -90.0490],
+            "chicago": [41.8781, -87.6298],
+        }
+        map_rows = []
+        for r in open_records:
+            t = r.triage
+            a = r.assessment
+            loc_lower = (t.location or "").lower()
+            coords = [32.0835, -81.0998]  # Default to Savannah port hub
+            for node_key, node_coords in NODE_COORDINATES.items():
+                if node_key in loc_lower:
+                    coords = node_coords
+                    break
+            
+            color = [220, 50, 50, 200] if r.tier == "red" else ([240, 140, 30, 200] if r.tier == "orange" else [40, 180, 80, 200])
+            val = a.affected_value if a else 5000.0
+            radius = max(30000, min(150000, int(val * 3)))
+            map_rows.append({
+                "lat": coords[0],
+                "lon": coords[1],
+                "color": color,
+                "radius": radius,
+                "ref": t.shipment_ref or "UNIDENTIFIED",
+                "type": t.exception_type,
+                "location": t.location or "Network Hub",
+                "value_str": f"${val:,.0f} USD",
+                "tier": r.tier.upper(),
+            })
+
+        map_df = pd.DataFrame(map_rows)
+        view_state = pdk.ViewState(latitude=36.0, longitude=-82.0, zoom=4.0, pitch=35)
+        scatter_layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=map_df,
+            get_position=["lon", "lat"],
+            get_color="color",
+            get_radius="radius",
+            pickable=True,
+            opacity=0.8,
+            stroked=True,
+            filled=True,
+            radius_scale=1,
+            get_line_color=[255, 255, 255, 255],
+            get_line_width=2,
+        )
+        st.pydeck_chart(
+            pdk.Deck(
+                layers=[scatter_layer],
+                initial_view_state=view_state,
+                tooltip={"html": "<b>Ref:</b> {ref}<br/><b>Type:</b> {type}<br/><b>Location:</b> {location}<br/><b>Risk:</b> {value_str}<br/><b>Tier:</b> {tier}"},
+            )
+        )
+
+        st.subheader("Active Disruption Overview Table")
         rows = []
         for r in open_records:
             t = r.triage
@@ -522,6 +604,13 @@ with tab_log:
             mime="application/json",
             use_container_width=True,
         )
+
+    chain_valid = verify_soc2_audit_chain(worm_json)
+    if chain_valid and desk.logs:
+        st.success("🔒 **SOC2 Cryptographic Hash Chain Integrity: VERIFIED** (SHA-256 Root & Block Hashes Valid)")
+    elif desk.logs:
+        st.error("⚠️ Cryptographic Audit Log Verification Failed!")
+
     if desk.logs:
         st.code("\n".join(desk.logs), language="text")
     else:
