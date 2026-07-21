@@ -5,12 +5,12 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .models import Assessment, Draft, ExceptionRecord, TriageResult
+from .models import Assessment, Draft, ExceptionRecord, MitigationAction, TriageResult
 
 TIER_ORDER = {"red": 0, "orange": 1, "green": 2}
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def _now() -> str:
@@ -124,7 +124,13 @@ class Desk:
             for serialized in snapshot["exceptions"]:
                 serialized["triage"] = TriageResult(**serialized["triage"])
                 if serialized["assessment"]:
-                    serialized["assessment"] = Assessment(**serialized["assessment"])
+                    a_dict = dict(serialized["assessment"])
+                    actions_raw = a_dict.pop("mitigation_actions", [])
+                    actions = [
+                        item if isinstance(item, MitigationAction) else MitigationAction(**item)
+                        for item in actions_raw
+                    ]
+                    serialized["assessment"] = Assessment(mitigation_actions=actions, **a_dict)
                 if serialized["draft"]:
                     serialized["draft"] = Draft(**serialized["draft"])
                 record = ExceptionRecord(**serialized)

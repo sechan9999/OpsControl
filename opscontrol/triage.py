@@ -22,6 +22,10 @@ TYPE_RULES = [
     ("WEATHER_DIVERT", ["divert", "rerouted", "reroute"]),
     ("ACCIDENT", ["accident", "tow required"]),
     ("MISSED_CUTOFF", ["missed the documentation cutoff", "missed erd", "erd cutoff", "cutoff"]),
+    ("GEOPOLITICAL", ["sanctions", "trade war", "embargo", "port closure", "strike"]),
+    ("CYBER_ATTACK", ["cyber", "ransomware", "system outage", "it failure", "hack"]),
+    ("FINANCIAL_FAILURE", ["bankruptcy", "receivership", "credit hold", "payment stop"]),
+    ("PANDEMIC", ["quarantine", "health emergency", "outbreak", "facility closure"]),
     ("PORT_DELAY", ["held", "gate closed", "gate moves", "congestion", "berth", "backlog",
                     "delay", "delayed", "detention", "waiting", "appointment window was missed",
                     "demurrage", "12h behind", "running", "suspended"]),
@@ -56,6 +60,26 @@ def _parse_delay_hours(raw: str) -> Optional[float]:
     m = DAYS_RE.search(raw)
     if m:
         return float(m.group(1)) * 24
+    return None
+
+
+def _severity_label(severity: int) -> str:
+    if severity >= 5:
+        return "Critical"
+    if severity == 4:
+        return "High"
+    if severity == 3:
+        return "Medium"
+    return "Low"
+
+
+def _parse_duration_days(raw: str, delay_hours: Optional[float]) -> Optional[int]:
+    m = DAYS_RE.search(raw)
+    if m:
+        return int(m.group(1))
+    if delay_hours:
+        days = round(delay_hours / 24)
+        return max(1, days) if days >= 1 else None
     return None
 
 
@@ -94,6 +118,7 @@ def stub_triage(raw: str, channel: str) -> TriageResult:
         return TriageResult(
             shipment_ref=None, exception_type="UNKNOWN", location=None, severity=2,
             summary="Unparseable feed message", customer_impact="Unknown until reviewed",
+            severity_label="Low", estimated_duration_days=None,
         )
 
     low = raw.lower()
@@ -102,10 +127,12 @@ def stub_triage(raw: str, channel: str) -> TriageResult:
     exc_type = _classify(raw)
     location = _find_location(raw)
     delay_hours = _parse_delay_hours(raw)
+    duration_days = _parse_duration_days(raw, delay_hours)
     informational = any(n in low for n in INFORMATIONAL) and exc_type in ("PORT_DELAY", "UNKNOWN")
 
     base = {
-        "REEFER_TEMP": 4, "CUSTOMS_HOLD": 3, "VESSEL_ROLLOVER": 3, "ACCIDENT": 3,
+        "REEFER_TEMP": 4, "GEOPOLITICAL": 4, "CYBER_ATTACK": 4, "FINANCIAL_FAILURE": 4,
+        "CUSTOMS_HOLD": 3, "VESSEL_ROLLOVER": 3, "ACCIDENT": 3, "PANDEMIC": 3,
         "MISSED_CUTOFF": 3, "CHASSIS_SHORTAGE": 2, "WEATHER_DIVERT": 3,
         "PORT_DELAY": 2, "UNKNOWN": 2,
     }[exc_type]
@@ -117,6 +144,7 @@ def stub_triage(raw: str, channel: str) -> TriageResult:
     if informational:
         severity = 1
     severity = max(1, min(5, severity))
+    sev_label = _severity_label(severity)
 
     summary = raw.strip().replace("\n", " ")
     summary = (summary[:140] + "...") if len(summary) > 140 else summary
@@ -127,7 +155,8 @@ def stub_triage(raw: str, channel: str) -> TriageResult:
     return TriageResult(
         shipment_ref=ref, exception_type=exc_type, location=location,
         severity=severity, summary=summary, customer_impact=impact,
-        delay_hours=delay_hours,
+        delay_hours=delay_hours, severity_label=sev_label,
+        estimated_duration_days=duration_days,
     )
 
 
@@ -141,17 +170,20 @@ def _openai_triage(raw: str, channel: str, settings: Settings) -> TriageResult:
     schema = {
         "type": "object", "additionalProperties": False,
         "required": ["shipment_ref", "exception_type", "location", "severity",
-                     "summary", "customer_impact", "delay_hours"],
+                     "summary", "customer_impact", "delay_hours", "severity_label", "estimated_duration_days"],
         "properties": {
             "shipment_ref": {"type": ["string", "null"]},
             "exception_type": {"type": "string", "enum": [
                 "PORT_DELAY", "CUSTOMS_HOLD", "VESSEL_ROLLOVER", "CHASSIS_SHORTAGE",
-                "WEATHER_DIVERT", "REEFER_TEMP", "ACCIDENT", "MISSED_CUTOFF", "UNKNOWN"]},
+                "WEATHER_DIVERT", "REEFER_TEMP", "ACCIDENT", "MISSED_CUTOFF",
+                "GEOPOLITICAL", "CYBER_ATTACK", "FINANCIAL_FAILURE", "PANDEMIC", "UNKNOWN"]},
             "location": {"type": ["string", "null"]},
             "severity": {"type": "integer", "minimum": 1, "maximum": 5},
             "summary": {"type": "string"},
             "customer_impact": {"type": "string"},
             "delay_hours": {"type": ["number", "null"]},
+            "severity_label": {"type": "string", "enum": ["Critical", "High", "Medium", "Low"]},
+            "estimated_duration_days": {"type": ["integer", "null"]},
         },
     }
     client = OpenAI()

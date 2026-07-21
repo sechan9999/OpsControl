@@ -10,11 +10,11 @@ from features.ingest import ingest_batch, ingest_message
 from opscontrol.config import Settings, settings_from_env
 from opscontrol.store import Desk
 
-st.set_page_config(page_title="OpsControl - AI Exception Desk", page_icon="FD", layout="wide")
+st.set_page_config(page_title="OpsControl - AI Exception Desk", page_icon="🚢", layout="wide")
 
 SEED_PATH = Path(__file__).parent / "data" / "savannah_storm.jsonl"
 STATE_PATH = Path(os.getenv("OPSCONTROL_STATE_PATH", Path(__file__).parent / ".opscontrol_state.json"))
-TIER_BADGE = {"red": "RED", "orange": "ORANGE", "green": "GREEN"}
+TIER_BADGE = {"red": "🔴 RED", "orange": "🟠 ORANGE", "green": "🟢 GREEN"}
 STATUS_LABEL = {
     "ready_for_approval": "ready for approval",
     "needs_human_review": "needs human review",
@@ -26,6 +26,8 @@ SAMPLE_MESSAGES = {
     "Port delay (EDI)": "STATUS: CNTR MSKU9911223 SHPMT OPS-40077-B HELD PORT OF SAVANNAH REASON WX EST DELAY 18HRS",
     "Customs hold (email)": "Hi team, customs flagged shipment OPS-40078-C for documentation exam at Long Beach. Broker says 2-3 days. Consignee expects delivery Friday.",
     "Reefer alarm (SMS)": "reefer alarm OPS-40079-A temp -11C setpoint -18C tech dispatched",
+    "Geopolitical strike (email)": "ALERT: Port closure and dockworker strike at Port of Savannah affecting shipment OPS-40021-A. Sanctions and port closure in effect for 5 days.",
+    "Cyber attack outage (EDI)": "SYSTEM OUTAGE: Ransomware cyber attack hit carrier freight TMS. Terminal gate operations suspended for OPS-40026-C.",
     "No reference (email)": "A container is held at customs, no booking reference available yet, broker investigating documentation exam status.",
     "Malformed feed": "@@@#ERR 0x11 FEED RESYNC ]]]]] NO PAYLOAD {{{{",
 }
@@ -34,6 +36,8 @@ SAMPLE_CHANNELS = {
     "Port delay (EDI)": "edi",
     "Customs hold (email)": "email",
     "Reefer alarm (SMS)": "sms",
+    "Geopolitical strike (email)": "email",
+    "Cyber attack outage (EDI)": "edi",
     "No reference (email)": "email",
     "Malformed feed": "edi",
 }
@@ -56,7 +60,6 @@ def persist_and_rerun() -> None:
     if callable(save_snapshot):
         save_snapshot(STATE_PATH)
     st.rerun()
-
 
 
 base_settings = settings_from_env()
@@ -179,9 +182,10 @@ tab_inbox, tab_review, tab_log = st.tabs([
 def render_exception(record, namespace: str) -> None:
     triage, assessment, draft = record.triage, record.assessment, record.draft
     arrived = record.created_at[11:19] if record.created_at else ""  # HH:MM:SS
+    sev_label = getattr(triage, "severity_label", "Medium")
     title = (
         f"{TIER_BADGE[record.tier]} | {triage.shipment_ref or 'NO-REF'} | "
-        f"{triage.exception_type} | sev {triage.severity} | {STATUS_LABEL[record.status]}"
+        f"{triage.exception_type} | sev {triage.severity} ({sev_label}) | {STATUS_LABEL[record.status]}"
         + (f" | arrived {arrived}" if arrived else "")
     )
     with st.expander(title, expanded=False):
@@ -189,13 +193,27 @@ def render_exception(record, namespace: str) -> None:
         with left:
             st.markdown(f"**Summary:** {triage.summary}")
             st.markdown(f"**Customer impact:** {triage.customer_impact}")
+            if triage.estimated_duration_days:
+                st.markdown(f"**Est. disruption duration:** {triage.estimated_duration_days} days")
             if assessment:
                 st.markdown(f"**Assessment:** {assessment.impact_summary}")
+                conf_label = getattr(assessment, "confidence_label", "Medium")
+                time_impact = (
+                    f"⏱ {assessment.time_to_impact_days:.1f}d to window"
+                    if assessment.time_to_impact_days is not None and assessment.time_to_impact_days > 0
+                    else ("⚠ window MISSED" if assessment.window_missed else "window holds")
+                )
                 st.markdown(
-                    f"**Confidence:** {assessment.confidence:.2f} | **Rounds:** {assessment.rounds_used}/5 | "
-                    f"**Window missed:** {'yes' if assessment.window_missed else 'no'} | "
+                    f"**Confidence:** {conf_label} ({assessment.confidence:.2f}) | **Rounds:** {assessment.rounds_used}/5 | "
+                    f"**Timeline:** {time_impact} | "
                     f"**At risk:** ${assessment.affected_value:,.0f}"
                 )
+                if assessment.mitigation_actions:
+                    st.markdown("**Structured Mitigation Cascade (Ontology Grounded):**")
+                    for act in assessment.mitigation_actions:
+                        cost_str = f" • Est cost: ${act.estimated_cost_usd:,.0f}" if act.estimated_cost_usd else ""
+                        saved_str = f" • Save {act.lead_time_saved_days}d" if act.lead_time_saved_days else ""
+                        st.markdown(f"• `{act.action_type}`: {act.description}{cost_str}{saved_str}")
             if draft:
                 st.text_input("Email subject", draft.email_subject, key=f"{namespace}-subj-{record.id}")
                 st.text_area("Customer email draft (editable)", draft.email_body,
@@ -228,38 +246,31 @@ def render_exception(record, namespace: str) -> None:
                     if draft
                     else None
                 )
-                approve_and_send(
-                    desk,
-                    record.id,
-                    subject=subject,
-                    body=body,
-                )
+                approve_and_send(desk, record.id, subject=subject, body=body)
                 persist_and_rerun()
-            if record.status == "ready_for_approval":
-                if col_b.button("Send to review", key=f"{namespace}-review-{record.id}", use_container_width=True):
-                    send_to_review(desk, record.id)
-                    persist_and_rerun()
+            if col_b.button("Send to review", key=f"{namespace}-review-{record.id}", use_container_width=True):
+                send_to_review(desk, record.id, reason="operator_escalated")
+                persist_and_rerun()
             if col_c.button("Dismiss", key=f"{namespace}-dismiss-{record.id}", use_container_width=True):
-                dismiss_exception(desk, record.id)
+                dismiss_exception(desk, record.id, reason="operator_dismissed")
                 persist_and_rerun()
 
 
 with tab_inbox:
     if not inbox_records:
-        st.info("Inbox is clear. Replay the Savannah storm or inject a message from the sidebar.")
-    for record in inbox_records:
-        render_exception(record, namespace="inbox")
+        st.info("No exceptions ready for approval.")
+    for r in inbox_records:
+        render_exception(r, namespace="inbox")
 
 with tab_review:
     if not review_records:
-        st.info("Nothing waiting on a human. The agent is confident about everything open.")
-    else:
-        st.warning("These need human judgment: unclassified feeds, unidentified shipments, or low confidence.")
-        for record in review_records:
-            render_exception(record, namespace="review")
+        st.info("No exceptions require human review.")
+    for r in review_records:
+        render_exception(r, namespace="review")
 
 with tab_log:
+    st.subheader("Event & Audit Log")
     if desk.logs:
-        st.code("\n".join(desk.logs[:120]), language="text")
+        st.code("\n".join(desk.logs), language="text")
     else:
-        st.info("No activity yet.")
+        st.info("No audit logs yet.")

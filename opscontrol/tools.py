@@ -1,6 +1,8 @@
 import hashlib
 from typing import Protocol
 
+from .models import AlternativeCarrier
+
 # Known shipments referenced by the seed data. Unknown refs get a deterministic
 # synthetic record so demos and tests are reproducible.
 MOCK_SHIPMENTS = {
@@ -29,6 +31,20 @@ PORT_CONDITIONS = {
     "charleston": {"congestion_level": "moderate", "weather": "Rain", "avg_dwell_hours": 7},
 }
 
+MOCK_ALTERNATIVE_CARRIERS = {
+    "SAV->RDU": [
+        AlternativeCarrier(name="ColdExpress", lane="SAV->RDU", qualification_status="approved", capacity_available="12 loads/wk", price_premium_pct=8.0, estimated_transit_days=1),
+        AlternativeCarrier(name="PolarFreight", lane="SAV->RDU", qualification_status="pre_qualified", capacity_available="8 loads/wk", price_premium_pct=15.0, estimated_transit_days=2),
+    ],
+    "SAV->ATL": [
+        AlternativeCarrier(name="ApexLogistics", lane="SAV->ATL", qualification_status="approved", capacity_available="25 loads/wk", price_premium_pct=5.0, estimated_transit_days=1),
+        AlternativeCarrier(name="SouthernRelay", lane="SAV->ATL", qualification_status="pre_qualified", capacity_available="15 loads/wk", price_premium_pct=10.0, estimated_transit_days=1),
+    ],
+    "MEM->ORD": [
+        AlternativeCarrier(name="FrostLine", lane="MEM->ORD", qualification_status="approved", capacity_available="10 loads/wk", price_premium_pct=12.0, estimated_transit_days=2),
+    ],
+}
+
 
 # ---------------------------------------------------------------------------
 # Adapter protocol — production deployments replace MockShipmentAdapter
@@ -52,6 +68,10 @@ class ShipmentAdapter(Protocol):
 
     def eta_impact(self, ref: str | None, delay_hours: float, slack_hours: float) -> dict:
         """Return ETA impact dict, or ``{"error": "..."}`` on failure."""
+        ...
+
+    def alternative_carriers(self, lane: str | None) -> list[AlternativeCarrier]:
+        """Return list of pre-qualified alternative carriers for a lane."""
         ...
 
 
@@ -81,6 +101,13 @@ class MockShipmentAdapter:
             "window_missed": hours_past > 0,
             "hours_past_window": round(hours_past, 1),
         }
+
+    def alternative_carriers(self, lane: str | None) -> list[AlternativeCarrier]:
+        if not lane:
+            return []
+        return MOCK_ALTERNATIVE_CARRIERS.get(lane, [
+            AlternativeCarrier(name=f"AltCarrier-{lane}", lane=lane, qualification_status="pre_qualified", capacity_available="5 loads/wk", price_premium_pct=10.0, estimated_transit_days=2)
+        ])
 
 
 # Module-level default — replace this with a production adapter via dependency
@@ -114,3 +141,7 @@ def eta_impact(ref, delay_hours, slack_hours):
 
 def port_conditions(location):
     return default_adapter.port_conditions(location)
+
+
+def alternative_carriers(lane):
+    return default_adapter.alternative_carriers(lane)
