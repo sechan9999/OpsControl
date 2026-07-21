@@ -30,6 +30,7 @@ class Desk:
         self.logs: list[str] = []
         self.counters = {"ingested": 0, "duplicates": 0, "sent": 0, "dismissed": 0}
         self.adaptive_thresholds: dict[str, float] = {}
+        self.feedback_dataset: list[dict] = []
         self._next_msg = 0
         self._next_exc = 0
 
@@ -127,6 +128,7 @@ class Desk:
             desk.logs = list(snapshot["logs"])
             desk.counters = dict(snapshot["counters"])
             desk.adaptive_thresholds = dict(snapshot.get("adaptive_thresholds", {}))
+            desk.feedback_dataset = list(snapshot.get("feedback_dataset", []))
             desk._next_msg = int(snapshot["next_msg"])
             desk._next_exc = int(snapshot["next_exc"])
             for serialized in snapshot["exceptions"]:
@@ -156,6 +158,7 @@ class Desk:
             "logs": self.logs,
             "counters": self.counters,
             "adaptive_thresholds": self.adaptive_thresholds,
+            "feedback_dataset": self.feedback_dataset,
             "next_msg": self._next_msg,
             "next_exc": self._next_exc,
         }

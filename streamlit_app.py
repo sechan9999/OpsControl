@@ -6,10 +6,15 @@ from pathlib import Path
 import streamlit as st
 
 from features.approval import approve_and_send, dismiss_exception, send_to_review, verify_pin
+from features.booking import execute_alternative_carrier_booking
 from features.email import get_default_sender
 from features.ingest import ingest_batch, ingest_message, parse_feed_drop_content
+from features.rbac import ROLES, can_user_approve_record, export_soc2_audit_logs_json, get_role_permissions
 from opscontrol.config import Settings, settings_from_env
+from opscontrol.graph_agent import SAMPLE_QUERIES, query_fabric_iq_agent
 from opscontrol.store import Desk
+from opscontrol.telemetry import get_port_telemetry, get_vessel_telemetry
+from opscontrol.tools import alternative_carriers
 
 st.set_page_config(page_title="FreightDesk - AI Exception Desk", page_icon="🚢", layout="wide")
 
@@ -90,10 +95,11 @@ desk = get_desk()
 with st.sidebar:
     st.header("Operator")
     operator_name = st.text_input("Name", placeholder="e.g. J. Park", key="operator-name")
+    user_role = st.selectbox("Role (RBAC)", ROLES, index=0, help="Supervisor role required to approve RED tier exceptions >= $10k risk.", key="rbac-role")
     pin = st.text_input("Approval PIN", type="password", help="Enter name + PIN to enable Approve & send (demo PIN: 2468).", key="approval-pin")
     pin_valid = verify_pin(pin)
     operator_valid = bool(operator_name.strip())
-    can_approve = pin_valid and operator_valid
+    can_approve_base = pin_valid and operator_valid
     st.caption("Enter name + PIN to enable Approve & send (demo PIN: 2468).")
 
     st.header("Desk settings")
@@ -226,8 +232,9 @@ open_records = desk.sorted_open()
 review_records = desk.by_status("needs_human_review")
 inbox_records = [record for record in open_records if record.status != "needs_human_review"]
 
-tab_inbox, tab_map, tab_review, tab_log = st.tabs([
+tab_inbox, tab_agent, tab_map, tab_review, tab_log = st.tabs([
     f"Inbox ({len(inbox_records)})",
+    "Fabric IQ AI Agent",
     f"Disruption map ({len(open_records)})",
     f"Human review ({len(review_records)})",
     "Activity log",
@@ -271,16 +278,45 @@ def render_exception(record, namespace: str) -> None:
                     for act in mitigation_actions:
                         cost_str = f" • Est cost: ${act.estimated_cost_usd:,.0f}" if act.estimated_cost_usd else ""
                         saved_str = f" • Save {act.lead_time_saved_days}d" if act.lead_time_saved_days else ""
-                        st.markdown(f"• `{act.action_type}`: {act.description}{cost_str}{saved_str}")
+                        status_chip = f" [`{act.status}`]" if act.status != "proposed" else ""
+                        st.markdown(f"• `{act.action_type}`{status_chip}: {act.description}{cost_str}{saved_str}")
+
+            # One-Click Alternative Carrier Booking Tender UI
+            has_alt_action = any(a.action_type == "ACTIVATE_ALTERNATIVE_CARRIER" for a in (assessment.mitigation_actions if assessment else []))
+            if has_alt_action:
+                lane_val = "SAV->RDU" if (triage.shipment_ref == "OPS-40045-A") else ("SAV->ATL" if "sav" in (triage.location or "").lower() else "MEM->ORD")
+                alts = alternative_carriers(lane_val)
+                with st.expander("🚚 One-Click Alternative Carrier Tender Booking", expanded=False):
+                    alt_names = [f"{a.name} ({a.capacity_available}, +{a.price_premium_pct:.1f}% cost, {a.qualification_status})" for a in alts]
+                    selected_idx = st.selectbox("Select Pre-Qualified Backup Carrier", range(len(alts)), format_func=lambda i: alt_names[i], key=f"{namespace}-alt-sel-{record.id}")
+                    if st.button("Execute Carrier Tender Booking", key=f"{namespace}-tender-btn-{record.id}"):
+                        receipt = execute_alternative_carrier_booking(desk, record.id, alts[selected_idx], operator_name=operator_name.strip() or "Operator")
+                        st.success(f"Tender #{receipt.booking_id} confirmed with {receipt.carrier_name} for ${receipt.estimated_cost_usd:,.0f} USD.")
+                        persist_and_rerun()
+
             if draft:
                 st.text_input("Email subject", draft.email_subject, key=f"{namespace}-subj-{record.id}")
                 st.text_area("Customer email draft (editable)", draft.email_body,
                              height=200, key=f"{namespace}-body-{record.id}")
                 st.markdown("**Internal action plan**")
                 st.markdown(draft.action_plan)
+
         with right:
             st.markdown("**Raw message**")
             st.code(record.raw, language="text", wrap_lines=True)
+
+            # Live AIS Vessel & Port Terminal Telemetry
+            vessel_tel = get_vessel_telemetry(triage.shipment_ref)
+            port_tel = get_port_telemetry(triage.location)
+            if vessel_tel or port_tel:
+                with st.expander("📡 Live AIS Vessel & Port Telemetry", expanded=True):
+                    if vessel_tel:
+                        st.markdown(f"**Vessel:** {vessel_tel.vessel_name} ({vessel_tel.flag}) | **Speed:** {vessel_tel.speed_knots} kts | **Status:** {vessel_tel.status}")
+                        st.markdown(f"**ETA (UTC):** `{vessel_tel.eta_utc}` | **Anchorage Dwell:** {vessel_tel.anchorage_dwell_hours}h")
+                    if port_tel:
+                        st.markdown(f"**Port Node:** {port_tel.port_name} (`{port_tel.code}`) | **Congestion:** {port_tel.congestion_index*100:.0f}%")
+                        st.markdown(f"**Status:** `{port_tel.terminal_status}` | **Weather:** {port_tel.weather_condition} ({port_tel.wind_knots} kts)")
+
             st.markdown("**Ontology Cascade Graph**")
             st.markdown(generate_ontology_mermaid(triage, assessment))
             if assessment and assessment.trace:
@@ -288,19 +324,23 @@ def render_exception(record, namespace: str) -> None:
                 st.json(assessment.trace, expanded=False)
 
         if record.status in ("ready_for_approval", "needs_human_review"):
+            affected_val = assessment.affected_value if assessment else 0.0
+            rbac_can_approve = can_user_approve_record(user_role, record.tier, affected_val)
+            allow_approve = can_approve_base and rbac_can_approve
+
             col_a, col_b, col_c = st.columns(3)
             with col_a:
                 btn_approve = st.button(
                     "Approve & send",
                     key=f"{namespace}-approve-{record.id}",
                     use_container_width=True,
-                    disabled=not can_approve,
-                    help="Requires non-empty Operator Name and correct Approval PIN (2468)" if not can_approve else "Approve and deliver customer email",
+                    disabled=not allow_approve,
+                    help="Requires Supervisor role for RED tier >= $10k risk" if (can_approve_base and not rbac_can_approve) else ("Requires Name + PIN (2468)" if not can_approve_base else "Approve and deliver customer email"),
                 )
                 if btn_approve:
                     subject = st.session_state.get(f"{namespace}-subj-{record.id}", draft.email_subject if draft else None)
                     body = st.session_state.get(f"{namespace}-body-{record.id}", draft.email_body if draft else None)
-                    approve_and_send(desk, record.id, subject=subject, body=body, operator_name=operator_name, pin=pin)
+                    approve_and_send(desk, record.id, subject=subject, body=body, operator_name=operator_name.strip() or "Operator", pin=pin)
                     persist_and_rerun()
             with col_b:
                 if st.button("Send to review", key=f"{namespace}-review-{record.id}", use_container_width=True):
@@ -317,6 +357,30 @@ with tab_inbox:
         st.info("Inbox is clear. Replay the Savannah storm or inject a message from the sidebar.")
     for r in inbox_records:
         render_exception(r, namespace="inbox")
+
+with tab_agent:
+    st.subheader("🌐 Microsoft Fabric IQ AI Graph Agent")
+    st.markdown("Ask natural language questions grounded in the supply chain disruption ontology graph.")
+
+    q_choice = st.selectbox("Sample Queries", SAMPLE_QUERIES, key="graph-q-choice")
+    user_q = st.text_input("Or type your supply chain question", value=q_choice, key="graph-q-input")
+
+    if st.button("Query Fabric IQ Agent", type="primary", key="query-agent-btn"):
+        res = query_fabric_iq_agent(user_q, desk)
+        st.success(f"**Agent Response:** {res.summary_answer}")
+        
+        ca, cb = st.columns([1, 1])
+        with ca:
+            st.markdown("**Cypher Graph Traversal Query**")
+            st.code(res.cypher_query, language="cypher")
+            st.metric("Matched Graph Nodes", res.affected_nodes)
+            st.metric("Total Revenue Exposure", f"${res.revenue_at_risk_usd:,.0f} USD")
+        with cb:
+            st.markdown("**Grounding Graph Subgraph**")
+            st.markdown(res.mermaid_subgraph)
+            if res.matched_records:
+                st.markdown("**Matched Network Entities**")
+                st.json(res.matched_records, expanded=False)
 
 with tab_map:
     if not open_records:
@@ -347,6 +411,18 @@ with tab_review:
 
 with tab_log:
     st.subheader("Event & Audit Log")
+    col_log_h, col_log_dl = st.columns([3, 1])
+    with col_log_h:
+        st.markdown(f"**Total Audit Events:** {len(desk.logs)}")
+    with col_log_dl:
+        worm_json = export_soc2_audit_logs_json(desk.logs)
+        st.download_button(
+            "Download SOC2 WORM Log (JSON)",
+            data=worm_json,
+            file_name="soc2_audit_trail.json",
+            mime="application/json",
+            use_container_width=True,
+        )
     if desk.logs:
         st.code("\n".join(desk.logs), language="text")
     else:
@@ -354,4 +430,4 @@ with tab_log:
 
 default_sender = get_default_sender()
 smtp_status = "configured (live SMTP)" if getattr(default_sender, "mode", "") == "smtp" else "not configured (using mock)"
-st.caption(f"Channels: feed drop + manual inject | Approval: operator + PIN | Delivery: SMTP {smtp_status}")
+st.caption(f"Channels: feed drop + manual inject | Approval: operator + PIN ({user_role}) | Delivery: SMTP {smtp_status}")

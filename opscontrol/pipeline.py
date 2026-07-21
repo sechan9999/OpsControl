@@ -44,7 +44,7 @@ def process_message(raw: str, channel: str, desk: Desk,
 
         desk.set_status(rec.id, "investigating")
         desk.log("info", "agent_investigation_started", id=rec.id, ref=t.shipment_ref or "-")
-        assessment = investigate(t, settings)
+        assessment = investigate(t, settings, desk)
         desk.save_assessment(rec.id, assessment)
         desk.log("info", "agent_investigation_done", id=rec.id,
                  rounds=assessment.rounds_used, confidence=assessment.confidence,

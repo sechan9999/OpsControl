@@ -14,6 +14,20 @@ class FeedbackEvent:
     created_at: str
 
 
+def calculate_rlhf_confidence_calibration(exc_type: str, desk: Desk) -> float:
+    """Calculate RLHF confidence calibration delta based on operator approval feedback history."""
+    dataset = getattr(desk, "feedback_dataset", [])
+    type_events = [e for e in dataset if e.get("type") == exc_type]
+    if not type_events:
+        return 0.0
+
+    approved_count = sum(1 for e in type_events if e.get("outcome") == "approved")
+    approval_rate = approved_count / len(type_events)
+    # If approval rate > 80%, boost confidence up to +0.08. If < 50%, reduce confidence up to -0.10
+    delta = (approval_rate - 0.70) * 0.25
+    return round(max(-0.10, min(0.08, delta)), 2)
+
+
 def record_feedback(
     desk: Desk,
     exception_id: int,
@@ -31,9 +45,18 @@ def record_feedback(
     record = desk.exceptions[exception_id]
     exc_type = record.triage.exception_type
 
-    # Adaptive threshold adjustment logic:
-    # - Approved from human review -> threshold -0.05 (confidence/trust goes up, easier auto-queue)
-    # - Sent to human review (demoted) -> threshold +0.05 (confidence/trust goes down, stricter auto-queue)
+    # Append to desk.feedback_dataset for RLHF model calibration
+    if not hasattr(desk, "feedback_dataset"):
+        desk.feedback_dataset = []
+    desk.feedback_dataset.append({
+        "id": exception_id,
+        "type": exc_type,
+        "outcome": outcome,
+        "note": note,
+        "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    })
+
+    # Adaptive threshold adjustment logic
     adjusted_threshold = None
     if outcome == "approved" and record.status == "needs_human_review":
         adjusted_threshold = desk.adjust_threshold(exc_type, -0.05)

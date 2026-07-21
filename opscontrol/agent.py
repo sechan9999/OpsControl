@@ -1,7 +1,9 @@
 from typing import List
 from .config import Settings
 from .models import Assessment, MitigationAction, TriageResult
+from .store import Desk
 from . import tools
+from features.feedback_loop import calculate_rlhf_confidence_calibration
 
 RECOMMENDED_ACTIONS = {
     "PORT_DELAY": [
@@ -178,7 +180,7 @@ def _get_mitigation_actions(t: TriageResult, lane: str | None) -> List[Mitigatio
     return actions
 
 
-def investigate(t: TriageResult, settings: Settings) -> Assessment:
+def investigate(t: TriageResult, settings: Settings, desk: Desk | None = None) -> Assessment:
     """Bounded investigation loop mirroring SPEC section 4b, with a deterministic
     tool-selection policy standing in for GPT-5.6 reasoning. Tool errors become
     trace entries, never exceptions; exhaustion caps confidence at 0.5."""
@@ -243,6 +245,11 @@ def investigate(t: TriageResult, settings: Settings) -> Assessment:
         confidence -= 0.10  # delay was inferred, not stated
     if rounds >= settings.max_rounds and impact is None:
         confidence = min(confidence, 0.5)  # exhaustion cap (SPEC 4b)
+
+    if desk is not None:
+        rlhf_delta = calculate_rlhf_confidence_calibration(t.exception_type, desk)
+        confidence += rlhf_delta
+
     confidence = round(max(0.05, min(1.0, confidence)), 2)
 
     confidence_label = "High" if confidence >= 0.85 else ("Medium" if confidence >= 0.60 else "Low")
