@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterable, Mapping
 from typing import Any, Optional
 
@@ -24,11 +25,7 @@ def ingest_message(
     settings: Settings,
     metadata: Optional[Mapping[str, Any]] = None,
 ) -> Optional[ExceptionRecord]:
-    """Validate and ingest one operational message.
-
-    Returns the created exception record, or ``None`` when the normalized
-    message is a duplicate.
-    """
+    """Validate and ingest one operational message."""
     if not isinstance(raw, str) or not raw.strip():
         raise ValueError("raw message must be a non-empty string")
 
@@ -69,3 +66,35 @@ def ingest_batch(
         )
 
     return results
+
+
+def parse_feed_drop_content(content_bytes: bytes, filename: str) -> list[dict]:
+    """Parse raw uploaded bytes (.jsonl or .txt) into list of message dicts."""
+    text = content_bytes.decode("utf-8", errors="replace")
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    messages = []
+
+    if filename.lower().endswith(".jsonl"):
+        for line in lines:
+            try:
+                data = json.loads(line)
+                if isinstance(data, dict) and "raw" in data:
+                    messages.append({
+                        "raw": str(data["raw"]),
+                        "channel": str(data.get("channel", "edi")),
+                        "metadata": data.get("metadata"),
+                    })
+            except json.JSONDecodeError:
+                messages.append({"raw": line, "channel": "edi"})
+    else:
+        for line in lines:
+            low = line.lower()
+            if "status:" in low or "cntr" in low or "shpmt" in low:
+                channel = "edi"
+            elif "reefer alarm" in low or "sms" in low:
+                channel = "sms"
+            else:
+                channel = "email"
+            messages.append({"raw": line, "channel": channel})
+
+    return messages

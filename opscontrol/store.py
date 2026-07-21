@@ -29,8 +29,15 @@ class Desk:
         self.exceptions: dict[int, ExceptionRecord] = {}
         self.logs: list[str] = []
         self.counters = {"ingested": 0, "duplicates": 0, "sent": 0, "dismissed": 0}
+        self.adaptive_thresholds: dict[str, float] = {}
         self._next_msg = 0
         self._next_exc = 0
+
+    def adjust_threshold(self, exception_type: str, delta: float) -> float:
+        current = self.adaptive_thresholds.get(exception_type, 0.0)
+        new_val = max(-0.15, min(0.15, current + delta))
+        self.adaptive_thresholds[exception_type] = round(new_val, 2)
+        return self.adaptive_thresholds[exception_type]
 
     def log(self, level: str, event: str, **kw) -> None:
         rest = " ".join(f"{k}={v}" for k, v in kw.items())
@@ -119,6 +126,7 @@ class Desk:
             desk._hashes = set(snapshot["hashes"])
             desk.logs = list(snapshot["logs"])
             desk.counters = dict(snapshot["counters"])
+            desk.adaptive_thresholds = dict(snapshot.get("adaptive_thresholds", {}))
             desk._next_msg = int(snapshot["next_msg"])
             desk._next_exc = int(snapshot["next_exc"])
             for serialized in snapshot["exceptions"]:
@@ -147,6 +155,7 @@ class Desk:
             "exceptions": [asdict(record) for record in self.exceptions.values()],
             "logs": self.logs,
             "counters": self.counters,
+            "adaptive_thresholds": self.adaptive_thresholds,
             "next_msg": self._next_msg,
             "next_exc": self._next_exc,
         }

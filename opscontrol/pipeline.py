@@ -1,5 +1,6 @@
 from typing import Optional
 
+from features.customer_profile import BUILTIN_PROFILES, DEFAULT_PROFILE, apply_customer_profile
 from .agent import investigate
 from .composer import compose
 from .config import Settings
@@ -7,6 +8,15 @@ from .models import ExceptionRecord
 from .store import Desk
 from .tiering import tier
 from .triage import triage
+
+
+def resolve_profile_for_record(raw: str, ref: Optional[str], summary: str) -> DEFAULT_PROFILE:
+    low = f"{raw} {ref or ''} {summary}".lower()
+    if "pharma" in low or "novapharm" in low or "40045-a" in low:
+        return BUILTIN_PROFILES["NovaPharm"]
+    if "atlanta" in low or "retail" in low or "apparel" in low or "furniture" in low:
+        return BUILTIN_PROFILES["Atlanta Retail"]
+    return DEFAULT_PROFILE
 
 
 def process_message(raw: str, channel: str, desk: Desk,
@@ -43,15 +53,22 @@ def process_message(raw: str, channel: str, desk: Desk,
         rec.tier = tier(t.severity, assessment.window_missed, assessment.affected_value)
 
         desk.set_status(rec.id, "drafting")
-        desk.save_draft(rec.id, compose(t, assessment))
+        base_draft = compose(t, assessment)
+        profile = resolve_profile_for_record(raw, t.shipment_ref, assessment.impact_summary)
+        customized_draft = apply_customer_profile(base_draft, profile)
+        desk.save_draft(rec.id, customized_draft)
 
-        if assessment.confidence >= settings.confidence_threshold:
+        # Adaptive threshold check
+        type_offset = desk.adaptive_thresholds.get(t.exception_type, 0.0)
+        effective_threshold = max(0.50, min(0.95, settings.confidence_threshold + type_offset))
+
+        if assessment.confidence >= effective_threshold:
             desk.set_status(rec.id, "ready_for_approval")
             desk.log("info", "draft_ready", id=rec.id, tier=rec.tier)
         else:
             desk.set_status(rec.id, "needs_human_review")
             desk.log("warning", "routed_to_review", id=rec.id,
-                     reason=f"confidence {assessment.confidence:.2f} < {settings.confidence_threshold}")
+                     reason=f"confidence {assessment.confidence:.2f} < {effective_threshold:.2f} (base {settings.confidence_threshold:.2f}, offset {type_offset:+.2f})")
         return rec
 
     except Exception as e:  # pipeline boundary: never kill the desk

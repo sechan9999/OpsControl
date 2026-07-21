@@ -5,12 +5,13 @@ from pathlib import Path
 
 import streamlit as st
 
-from features.approval import approve_and_send, dismiss_exception, send_to_review
-from features.ingest import ingest_batch, ingest_message
+from features.approval import approve_and_send, dismiss_exception, send_to_review, verify_pin
+from features.email import get_default_sender
+from features.ingest import ingest_batch, ingest_message, parse_feed_drop_content
 from opscontrol.config import Settings, settings_from_env
 from opscontrol.store import Desk
 
-st.set_page_config(page_title="OpsControl - AI Exception Desk", page_icon="🚢", layout="wide")
+st.set_page_config(page_title="FreightDesk - AI Exception Desk", page_icon="🚢", layout="wide")
 
 SEED_PATH = Path(__file__).parent / "data" / "savannah_storm.jsonl"
 STATE_PATH = Path(os.getenv("OPSCONTROL_STATE_PATH", Path(__file__).parent / ".opscontrol_state.json"))
@@ -80,30 +81,62 @@ def generate_ontology_mermaid(triage, assessment) -> str:
 
 
 base_settings = settings_from_env()
-
 desk = get_desk()
 
+# ---------------------------------------------------------------------------
+# Sidebar Layout
+# ---------------------------------------------------------------------------
+
 with st.sidebar:
+    st.header("Operator")
+    operator_name = st.text_input("Name", placeholder="e.g. J. Park", key="operator-name")
+    pin = st.text_input("Approval PIN", type="password", help="Enter name + PIN to enable Approve & send (demo PIN: 2468).", key="approval-pin")
+    pin_valid = verify_pin(pin)
+    operator_valid = bool(operator_name.strip())
+    can_approve = pin_valid and operator_valid
+    st.caption("Enter name + PIN to enable Approve & send (demo PIN: 2468).")
+
     st.header("Desk settings")
     threshold = st.slider(
         "Confidence threshold for auto-queue", 0.50, 0.90, 0.70, 0.05,
         help="Drafts at or above this confidence go to the approval inbox; below it, a human reviews first.",
     )
-    # Live preview — how many records move at this threshold (#5)
+
     if desk.exceptions:
         _preview_ready = sum(
             1 for r in desk.exceptions.values()
-            if r.assessment and r.assessment.confidence >= threshold
+            if r.assessment and r.assessment.confidence >= (threshold + desk.adaptive_thresholds.get(r.triage.exception_type, 0.0))
             and r.status not in ("sent", "dismissed")
         )
         _preview_review = sum(
             1 for r in desk.exceptions.values()
-            if r.assessment and r.assessment.confidence < threshold
+            if r.assessment and r.assessment.confidence < (threshold + desk.adaptive_thresholds.get(r.triage.exception_type, 0.0))
             and r.status not in ("sent", "dismissed")
         )
         st.caption(
             f"At this threshold: **{_preview_ready}** → inbox &nbsp;|&nbsp; **{_preview_review}** → human review"
         )
+
+    with st.expander("Adaptive thresholds (Feedback loop)"):
+        if desk.adaptive_thresholds:
+            for exc_type, offset in sorted(desk.adaptive_thresholds.items()):
+                st.write(f"• `{exc_type}`: **{offset:+.2f}** (effective: {threshold + offset:.2f})")
+        else:
+            st.caption("No type threshold adjustments recorded yet. Feedback from human review automatically adjusts thresholds.")
+
+    st.header("Ingest a carrier feed drop")
+    uploaded_file = st.file_uploader(
+        "EDI-style / JSONL batch (.txt, .jsonl)",
+        type=["txt", "jsonl"],
+        help="Upload EDI text feeds or JSONL batches.",
+        key="feed-drop-file",
+    )
+    if st.button("Ingest feed drop", use_container_width=True, disabled=uploaded_file is None, key="ingest-drop-btn"):
+        if uploaded_file:
+            content_bytes = uploaded_file.getvalue()
+            parsed_msgs = parse_feed_drop_content(content_bytes, uploaded_file.name)
+            ingest_batch(parsed_msgs, desk, base_settings)
+            persist_and_rerun()
 
     st.header("Inject a single message")
     sample_key = st.selectbox("Sample", list(SAMPLE_MESSAGES.keys()))
@@ -116,7 +149,6 @@ with st.sidebar:
         ingest_message(raw, channel, desk, settings)
         persist_and_rerun()
 
-    # Batch inject UI (#4)
     with st.expander("Batch inject (one message per line)"):
         batch_channel = st.selectbox(
             "Channel for all messages",
@@ -144,7 +176,11 @@ with st.sidebar:
         "[Repo](https://github.com/sechan9999/OpsControl)"
     )
 
-st.title("OpsControl")
+# ---------------------------------------------------------------------------
+# Main App Header & Metrics
+# ---------------------------------------------------------------------------
+
+st.title("FreightDesk")
 st.caption(
     "**An AI exception desk for freight ops.** Raw carrier messages are triaged, "
     "investigated with a bounded agent, prioritized, and drafted for one-click approval."
@@ -189,8 +225,10 @@ if st.session_state.get("replayed"):
 open_records = desk.sorted_open()
 review_records = desk.by_status("needs_human_review")
 inbox_records = [record for record in open_records if record.status != "needs_human_review"]
-tab_inbox, tab_review, tab_log = st.tabs([
+
+tab_inbox, tab_map, tab_review, tab_log = st.tabs([
     f"Inbox ({len(inbox_records)})",
+    f"Disruption map ({len(open_records)})",
     f"Human review ({len(review_records)})",
     "Activity log",
 ])
@@ -251,38 +289,55 @@ def render_exception(record, namespace: str) -> None:
 
         if record.status in ("ready_for_approval", "needs_human_review"):
             col_a, col_b, col_c = st.columns(3)
-            if col_a.button("Approve & send", key=f"{namespace}-approve-{record.id}", use_container_width=True):
-                subject = (
-                    st.session_state.get(
-                        f"{namespace}-subj-{record.id}",
-                        draft.email_subject,
-                    )
-                    if draft
-                    else None
+            with col_a:
+                btn_approve = st.button(
+                    "Approve & send",
+                    key=f"{namespace}-approve-{record.id}",
+                    use_container_width=True,
+                    disabled=not can_approve,
+                    help="Requires non-empty Operator Name and correct Approval PIN (2468)" if not can_approve else "Approve and deliver customer email",
                 )
-                body = (
-                    st.session_state.get(
-                        f"{namespace}-body-{record.id}",
-                        draft.email_body,
-                    )
-                    if draft
-                    else None
-                )
-                approve_and_send(desk, record.id, subject=subject, body=body)
-                persist_and_rerun()
-            if col_b.button("Send to review", key=f"{namespace}-review-{record.id}", use_container_width=True):
-                send_to_review(desk, record.id, note="operator_escalated")
-                persist_and_rerun()
-            if col_c.button("Dismiss", key=f"{namespace}-dismiss-{record.id}", use_container_width=True):
-                dismiss_exception(desk, record.id, note="operator_dismissed")
-                persist_and_rerun()
+                if btn_approve:
+                    subject = st.session_state.get(f"{namespace}-subj-{record.id}", draft.email_subject if draft else None)
+                    body = st.session_state.get(f"{namespace}-body-{record.id}", draft.email_body if draft else None)
+                    approve_and_send(desk, record.id, subject=subject, body=body, operator_name=operator_name, pin=pin)
+                    persist_and_rerun()
+            with col_b:
+                if st.button("Send to review", key=f"{namespace}-review-{record.id}", use_container_width=True):
+                    send_to_review(desk, record.id, note="operator_escalated", by=operator_name.strip() or "operator")
+                    persist_and_rerun()
+            with col_c:
+                if st.button("Dismiss", key=f"{namespace}-dismiss-{record.id}", use_container_width=True):
+                    dismiss_exception(desk, record.id, note="operator_dismissed", by=operator_name.strip() or "operator")
+                    persist_and_rerun()
 
 
 with tab_inbox:
     if not inbox_records:
-        st.info("No exceptions ready for approval.")
+        st.info("Inbox is clear. Replay the Savannah storm or inject a message from the sidebar.")
     for r in inbox_records:
         render_exception(r, namespace="inbox")
+
+with tab_map:
+    if not open_records:
+        st.info("No active disruptions on network.")
+    else:
+        st.subheader("Active Disruption Overview")
+        rows = []
+        for r in open_records:
+            t = r.triage
+            a = r.assessment
+            rows.append({
+                "ID": r.id,
+                "Ref": t.shipment_ref or "UNIDENTIFIED",
+                "Tier": r.tier.upper(),
+                "Disruption Type": t.exception_type,
+                "Severity": f"{t.severity} ({getattr(t, 'severity_label', 'Medium')})",
+                "Location": t.location or "Global",
+                "At Risk": f"${a.affected_value:,.0f}" if a else "$0",
+                "Status": r.status,
+            })
+        st.dataframe(rows, use_container_width=True)
 
 with tab_review:
     if not review_records:
@@ -296,3 +351,7 @@ with tab_log:
         st.code("\n".join(desk.logs), language="text")
     else:
         st.info("No audit logs yet.")
+
+default_sender = get_default_sender()
+smtp_status = "configured (live SMTP)" if getattr(default_sender, "mode", "") == "smtp" else "not configured (using mock)"
+st.caption(f"Channels: feed drop + manual inject | Approval: operator + PIN | Delivery: SMTP {smtp_status}")
