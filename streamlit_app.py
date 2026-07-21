@@ -272,7 +272,7 @@ inbox_records = [record for record in open_records if record.status != "needs_hu
 
 tab_inbox, tab_ontology, tab_agent, tab_map, tab_review, tab_log = st.tabs([
     f"Inbox ({len(inbox_records)})",
-    "온톨로지 대시보드 (Ontology Dashboard)",
+    "Ontology Dashboard",
     "Fabric IQ AI Agent",
     f"Disruption map ({len(open_records)})",
     f"Human review ({len(review_records)})",
@@ -399,7 +399,7 @@ with tab_inbox:
 
 with tab_ontology:
     st.subheader("🌐 Microsoft Supply Chain Ontology Cascade Dashboard")
-    st.caption("Visualizing the 5-tier disruption cascade: **Disruption Event (파괴 사건) → Location/Port (위치) → Cargo/Shipment (화물) → Risk Exposure (손실 위험액) → Mitigation Action (대안 조치)**")
+    st.caption("Visualizing the 5-tier disruption cascade: **Disruption Event → Location/Port → Cargo/Shipment → Risk Exposure → Mitigation Action**")
 
     f1, f2 = st.columns(2)
     all_types = sorted(list(set(r.triage.exception_type for r in open_records))) if open_records else []
