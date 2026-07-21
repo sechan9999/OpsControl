@@ -85,6 +85,44 @@ def generate_ontology_mermaid(triage, assessment) -> str:
     return "```mermaid\n" + "\n".join(lines) + "\n```"
 
 
+def generate_network_cascade_mermaid(records, type_filter="All", sev_filter="All") -> str:
+    filtered = []
+    for r in records:
+        t = r.triage
+        sev_label = getattr(t, "severity_label", "Medium")
+        if type_filter != "All" and t.exception_type != type_filter:
+            continue
+        if sev_filter != "All" and sev_label != sev_filter:
+            continue
+        filtered.append(r)
+
+    if not filtered:
+        return "```mermaid\ngraph LR\n    Empty['No active disruption cascades match filter']\n```"
+
+    lines = ["graph LR"]
+    for i, r in enumerate(filtered[:8]):
+        t = r.triage
+        a = r.assessment
+        ref = t.shipment_ref or f"NO-REF-{r.id}"
+        exc = t.exception_type
+        loc = t.location or "Network Hub"
+        risk_str = f"${a.affected_value:,.0f}" if (a and a.affected_value) else "$0"
+        act_str = a.mitigation_actions[0].action_type if (a and a.mitigation_actions) else "MONITOR"
+
+        d_id = f"D{i}"
+        l_id = f"L{i}"
+        s_id = f"S{i}"
+        r_id = f"R{i}"
+        a_id = f"A{i}"
+
+        lines.append(f'    {d_id}["⚡ {exc}"] -->|affects| {l_id}["📍 {loc}"]')
+        lines.append(f'    {l_id} -->|supplies| {s_id}["📦 {ref}"]')
+        lines.append(f'    {s_id} -->|triggers| {r_id}["💰 {risk_str}"]')
+        lines.append(f'    {r_id} -->|recommends| {a_id}["🛡️ {act_str}"]')
+
+    return "```mermaid\n" + "\n".join(lines) + "\n```"
+
+
 base_settings = settings_from_env()
 desk = get_desk()
 
@@ -232,8 +270,9 @@ open_records = desk.sorted_open()
 review_records = desk.by_status("needs_human_review")
 inbox_records = [record for record in open_records if record.status != "needs_human_review"]
 
-tab_inbox, tab_agent, tab_map, tab_review, tab_log = st.tabs([
+tab_inbox, tab_ontology, tab_agent, tab_map, tab_review, tab_log = st.tabs([
     f"Inbox ({len(inbox_records)})",
+    "온톨로지 대시보드 (Ontology Dashboard)",
     "Fabric IQ AI Agent",
     f"Disruption map ({len(open_records)})",
     f"Human review ({len(review_records)})",
@@ -358,6 +397,66 @@ with tab_inbox:
     for r in inbox_records:
         render_exception(r, namespace="inbox")
 
+with tab_ontology:
+    st.subheader("🌐 Microsoft Supply Chain Ontology Cascade Dashboard")
+    st.caption("Visualizing the 5-tier disruption cascade: **Disruption Event (파괴 사건) → Location/Port (위치) → Cargo/Shipment (화물) → Risk Exposure (손실 위험액) → Mitigation Action (대안 조치)**")
+
+    f1, f2 = st.columns(2)
+    all_types = sorted(list(set(r.triage.exception_type for r in open_records))) if open_records else []
+    selected_type = f1.selectbox("Filter by Disruption Type", ["All"] + all_types, key="ont-type-filter")
+    selected_sev = f2.selectbox("Filter by Severity Level", ["All", "Critical", "High", "Medium", "Low"], key="ont-sev-filter")
+
+    filtered_open = []
+    for r in open_records:
+        t = r.triage
+        sev_label = getattr(t, "severity_label", "Medium")
+        if selected_type != "All" and t.exception_type != selected_type:
+            continue
+        if selected_sev != "All" and sev_label != selected_sev:
+            continue
+        filtered_open.append(r)
+
+    tot_risk = sum((r.assessment.affected_value if r.assessment else 0.0) for r in filtered_open)
+    avg_impact_days = [r.assessment.time_to_impact_days for r in filtered_open if r.assessment and r.assessment.time_to_impact_days is not None]
+    avg_impact_str = f"{sum(avg_impact_days)/len(avg_impact_days):.1f}d" if avg_impact_days else "N/A"
+    in_prog_tenders = sum(1 for r in filtered_open if r.assessment and any(a.status == "in_progress" for a in (r.assessment.mitigation_actions or [])))
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Active Disruption Cascades", len(filtered_open))
+    m2.metric("Total Risk Exposure", f"${tot_risk:,.0f} USD")
+    m3.metric("Avg Time to Impact", avg_impact_str)
+    m4.metric("Active Backup Tenders", in_prog_tenders)
+
+    st.markdown("### 📊 Network-Wide Visual Cascade Graph (Mermaid Flowchart)")
+    st.markdown(generate_network_cascade_mermaid(open_records, selected_type, selected_sev))
+
+    st.markdown("### 📋 Disruption & Mitigation Cascade Matrix")
+    if filtered_open:
+        matrix_rows = []
+        for r in filtered_open:
+            t = r.triage
+            a = r.assessment
+            acts = a.mitigation_actions if a else []
+            primary_act = acts[0].description if acts else (a.recommended_action if a else "Manual Review")
+            act_type = acts[0].action_type if acts else "MONITOR"
+            act_status = acts[0].status if acts else "proposed"
+            time_str = f"{a.time_to_impact_days:.1f}d" if (a and a.time_to_impact_days is not None) else ("MISSED" if (a and a.window_missed) else "Holding")
+
+            matrix_rows.append({
+                "ID": r.id,
+                "Disruption Event": f"⚡ {t.exception_type}",
+                "Severity": f"{t.severity} ({getattr(t, 'severity_label', 'Medium')})",
+                "Location": t.location or "Network Hub",
+                "Shipment Ref": t.shipment_ref or "UNIDENTIFIED",
+                "Risk Exposure ($)": f"${a.affected_value:,.0f}" if a else "$0",
+                "Timeline": time_str,
+                "Primary Mitigation Action": f"[{act_type}] {primary_act}",
+                "Action Status": act_status,
+            })
+        st.dataframe(matrix_rows, use_container_width=True)
+    else:
+        st.info("No active disruption cascades match the selected filter criteria.")
+
 with tab_agent:
     st.subheader("🌐 Microsoft Fabric IQ AI Graph Agent")
     st.markdown("Ask natural language questions grounded in the supply chain disruption ontology graph.")
@@ -368,7 +467,7 @@ with tab_agent:
     if st.button("Query Fabric IQ Agent", type="primary", key="query-agent-btn"):
         res = query_fabric_iq_agent(user_q, desk)
         st.success(f"**Agent Response:** {res.summary_answer}")
-        
+
         ca, cb = st.columns([1, 1])
         with ca:
             st.markdown("**Cypher Graph Traversal Query**")
