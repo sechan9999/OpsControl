@@ -62,6 +62,23 @@ def persist_and_rerun() -> None:
     st.rerun()
 
 
+def generate_ontology_mermaid(triage, assessment) -> str:
+    ref = triage.shipment_ref or "UNIDENTIFIED"
+    exc_type = triage.exception_type
+    sev = getattr(triage, "severity_label", "Medium")
+    loc = triage.location or "Network Node"
+    lines = ["graph TD"]
+    lines.append(f'    E["⚡ Disruption: {exc_type}"] -->|affects| L["📍 Location: {loc}"]')
+    lines.append(f'    L -->|supplies| S["📦 Shipment: {ref}"]')
+    if assessment:
+        at_risk = f"${assessment.affected_value:,.0f}" if assessment.affected_value else "$0"
+        lines.append(f'    S -->|triggers| R["📊 Risk: {at_risk}"]')
+        if assessment.mitigation_actions:
+            for i, act in enumerate(assessment.mitigation_actions[:2]):
+                lines.append(f'    R -->|recommends| A{i}["🛡️ Action: {act.action_type}"]')
+    return "```mermaid\n" + "\n".join(lines) + "\n```"
+
+
 base_settings = settings_from_env()
 
 desk = get_desk()
@@ -223,6 +240,8 @@ def render_exception(record, namespace: str) -> None:
         with right:
             st.markdown("**Raw message**")
             st.code(record.raw, language="text", wrap_lines=True)
+            st.markdown("**Ontology Cascade Graph**")
+            st.markdown(generate_ontology_mermaid(triage, assessment))
             if assessment and assessment.trace:
                 st.markdown("**Agent trace**")
                 st.json(assessment.trace, expanded=False)
